@@ -65,6 +65,9 @@ undo_t;
 #define CLEAR_SCREEN "\x1b[2J"
 #define RESTORE_VIDEO "\x1b[m"
 
+// Special keys
+#define BACKSPACE 127
+
 /* defined in buffer.c */
 char append_lines( const char *ibufp, const int addr, const char isglobal );
 char close_sbuf( void );
@@ -113,6 +116,7 @@ int read_file( const char *filename, const int addr );
 int write_file( const char * const filename, const char * const mode,
                 const int from, const int to );
 int read_key();
+char *command_prompt(char *command);
 
 /* defined in main.c */
 char is_regular_file( int fd );

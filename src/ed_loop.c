@@ -665,7 +665,7 @@ int ed_loop( const char loose )
   while( 1 )
     {
     if( status < 0 && verbose ) fprintf( stderr, "%s\n", errmsg );
-    if( prompt_on ) { printf( "%s", prompt_str ); fflush( stdout ); }
+    if( prompt_on ) { /*printf( "%s", prompt_str ); fflush( stdout );*/ }
     ibufp = get_tty_line( &len );
     if( !ibufp ) return err_status;
     if( !len )

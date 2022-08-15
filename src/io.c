@@ -21,6 +21,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <ctype.h>
 
 #include "ed.h"
 
@@ -320,4 +322,35 @@ int read_key(int ed) {
   if (bytes == -1 && errno != EAGAIN) die("read");
   if (ed && c == '\r') return '\n';
   return c;
+}
+
+/* enter ed command from visual interface */
+char *command_prompt(char *command) {
+  size_t bufsize = 128;
+  char *buf = malloc(bufsize);
+  size_t buflen = 0;
+  buf[0] = '\0';
+  while(1) {
+    //print_info_message(command, buf);
+    //update_screen();
+    int c = read_key(0);
+    if (c == BACKSPACE) { if (buflen != 0) buf[--buflen] = '\0'; }
+    else if (c == '\x1b') {
+      //print_info_message("");
+      free(buf);
+      return NULL;
+    } else if (c == '\r') {
+      if (buflen != 0) {
+        //print_info_message("");
+        return buf;
+      }
+    } else if (!(iscntrl(c) && c < 128)) {
+      if (buflen == bufsize - 1) {
+        bufsize *= 2;
+        buf = realloc(buf, bufsize);
+      }
+      buf[buflen++] = c;
+      buf[buflen] = '\0';
+    }
+  }
 }
