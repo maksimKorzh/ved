@@ -84,8 +84,8 @@ int print_intro_line(struct buffer * buf, char *line, int row, int offset, char 
 /* print display buffer */
 void print_buffer(struct buffer *buf) {
   for (int row = 0; row < ROWS; row++) {
-    int bufrow = row + row_offset + 1;
-    if (bufrow >= last_addr()) {
+    int bufrow = row + row_offset-1;
+    if (bufrow >= last_addr()+1) {
            if (print_intro_line(buf, "VED - Visual EDitor", row, 0, "")) {}
       else if (print_intro_line(buf, "version ", row, 2, VERSION)) {}
       else if (print_intro_line(buf, "by Code Monkey King", row, 3, "")) {}
