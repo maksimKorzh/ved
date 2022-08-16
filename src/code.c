@@ -262,34 +262,10 @@ void read_keyboard() {
   int c = read_key();
   switch(c) {
     case '\r': insert_new_line(); break;
-    case CONTROL('n'): new_file(); break;
-    case CONTROL('o'): {
-      char *name = command_prompt("Open file > %s");
-      if (name != NULL) open_file(name); break;
-    }
-    case CONTROL('e'): execute(); break;
+    
     case CONTROL('q'): clear_screen(); free(text); exit(0); break;
-    case CONTROL('s'): save_file(); break;
-    case HOME: curx = 0; break;
-    case END: if(cury < total_lines) curx = text[cury].len; break;
-    case DEL:
-    case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
-    case PAGE_UP:
-    case PAGE_DOWN: {
-      if (c == PAGE_UP) cury = row_offset;
-      else if (c == PAGE_DOWN) {
-        cury = row_offset + ROWS - 1;
-        if (cury > total_lines) cury = total_lines;
-      } int times = ROWS;
-      while (times--) move_cursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
-    } break;
-    case ARROW_LEFT:
-    case ARROW_RIGHT:
-    case ARROW_UP:
-    case ARROW_DOWN: move_cursor(c); break;
-    case CONTROL('l'):
-    case '\x1b': break;
-    default: insert_char(c); break;
+    //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
+    //default: insert_char(c); break;
   }
 }
 

@@ -32,7 +32,7 @@ SHELL = /bin/sh
 
 objs = buffer.o carg_parser.o global.o io.o \
        main.o ed_loop.o regex.o signal.o \
-       terminal.o
+       terminal.o ved.o
 
 
 .PHONY : all install install-info install-man install-strip \

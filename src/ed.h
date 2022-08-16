@@ -17,6 +17,8 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#define VERSION "0.0.1"
+
 enum Gflags
   {
   GLB = 0x01,			/* global command */
@@ -67,6 +69,9 @@ undo_t;
 
 // Special keys
 #define BACKSPACE 127
+
+// visual screen buffer
+struct buffer;
 
 /* defined in buffer.c */
 char append_lines( const char *ibufp, const int addr, const char isglobal );
@@ -163,5 +168,16 @@ void die(const char *message);
 void clear_screen();
 void raw_mode();
 void restore_terminal();
+
+/* defined in ved.c */
+void print_status_bar(struct buffer *buf);
+void print_buffer(struct buffer *buf);
+void append_buffer(struct buffer *buf, const char *string, int len);
+void scroll_buffer();
+void clear_buffer(struct buffer *buf);
+void update_screen();
+void read_keyboard();
+void init_ved();
+int ved_loop();
 
 

@@ -194,6 +194,7 @@ int main( const int argc, const char *argv[] )
     break;
     }
   ap_free( &parser );
-  raw_mode(); printf("we're now raw!\n\r");
-  return ed_loop( loose );
+  ved_loop();
+  return 0;
+  //return ed_loop( loose );
   }
