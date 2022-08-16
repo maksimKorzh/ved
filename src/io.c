@@ -325,14 +325,13 @@ int read_key(int ed) {
 }
 
 /* enter ed command from visual interface */
-char *command_prompt(char *command, int *lenp) {
+char *command_prompt(char *prompt, int *lenp) {
   size_t bufsize = 128;
   char *buf = malloc(bufsize);
   size_t buflen = 0;
   buf[0] = '\0';
   while(1) {
-    print_info_message(command, buf);
-    update_screen();
+    print_info_message(prompt, buf);
     int c = read_key(0);
     if (c == BACKSPACE) { if (buflen != 0) buf[--buflen] = '\0'; }
     else if (c == '\x1b') {
@@ -342,7 +341,7 @@ char *command_prompt(char *command, int *lenp) {
       return NULL;
     } else if (c == '\r') {
       if (buflen != 0) {
-        //print_info_message("");
+        print_info_message("");
         buf[buflen++] = '\n';
         buf[buflen] = '\0';
         *lenp = buflen;

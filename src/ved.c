@@ -32,6 +32,7 @@ void print_info_message(const char *fmt, ...) {
   va_start(ap, fmt);
   vsnprintf(info_message, sizeof(info_message), fmt, ap);
   va_end(ap);
+  update_screen();
 }
 
 /* print message bar */
@@ -84,6 +85,16 @@ int print_intro_line(struct buffer * buf, char *line, int row, int offset, char 
 /* print display buffer */
 void print_buffer(struct buffer *buf) {
   for (int row = 0; row < ROWS; row++) {
+    
+    
+    
+    line_t *lp = search_line_node(1);
+    char *line = get_sbuf_line(lp);
+    //clear_screen(); printf("%s", line); exit(0);
+    if (row == 2) append_buffer(buf, line, lp->len);
+    
+    
+    
     int bufrow = row + row_offset;
     if (bufrow >= total_lines) {
            if (print_intro_line(buf, "VED - Visual EDitor", row, 0, "")) {}
@@ -95,6 +106,8 @@ void print_buffer(struct buffer *buf) {
         append_buffer(buf, "~", 1);
       }
     } else {
+      //int len = buffer_head[bufrow]
+      
       //int len = text[bufrow].rlen - col_offset;
       //if (len < 0) len = 0;
       //if (len > COLS) len = COLS;
@@ -148,14 +161,14 @@ void update_screen() {
 void read_keyboard(int loose) {
   int c = read_key();
   switch(c) {
-    case (('q') & 0x1f): clear_screen(); exit(0); break;
-    case ':': {
+    //case (('q') & 0x1f): clear_screen(); exit(0); break;
+    /*case ':': {
         int status = ed_loop(loose);
         if (status) {
             clear_screen();
             exit(status);
         }
-    }
+    }*/
     //case '\r': insert_new_line(); break;
     //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
     //default: insert_char(c); break;
@@ -171,10 +184,9 @@ void init_ved() {
 
 /* visual editor loop */
 int ved_loop(int loose) {
-  init_ved();
   //return 0;
-  while (1) {
+  /*while (1) {
     update_screen();
     read_keyboard(loose);
-  }
+  }*/
 }

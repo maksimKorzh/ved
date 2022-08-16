@@ -397,8 +397,7 @@ static int exec_command( const char isglobal )
 
   const int addr_cnt = extract_addr_range(); if( addr_cnt < 0 ) return ERR;
   ibufp = skip_blanks( ibufp );
-  c = *ibufp++;
-
+  c = *ibufp++; //print_info_message("execute command: %c", c);
   switch( c )
     {
     case 'a': if( !get_command_suffix( &gflags ) ) return ERR;
@@ -658,22 +657,27 @@ int ed_loop( const char loose )
   volatile int linenum = 0;			/* script line number */
   int len, status, old_status;
 
-  /*disable_interrupts();
+  disable_interrupts();
   set_signals();
   status = setjmp( jmp_state );
   if( !status ) enable_interrupts();
-  else { status = -1; fputs( "\n?\n", stderr ); set_error_msg( "Interrupt" ); }*/
+  else { status = -1; fputs( "\n?\n", stderr ); set_error_msg( "Interrupt" ); }
   while( 1 )
-    {
+    {//update_screen();
     if( status < 0 && verbose ) fprintf( stderr, "%s\n", errmsg );
     if( prompt_on ) { /*printf( "%s", prompt_str ); fflush( stdout );*/ }
-        
-    ibufp = command_prompt(":%s", &len);
+
+
+    //print_info_message("ed loop");
+    ibufp = command_prompt(":%s", &len); //print_info_message(ibufp);
+    
+    
     if (!ibufp) return err_status;
     if( !len )
       {
       if( !modified() || scripted() ) return err_status;
       fputs( "?\n", stderr ); set_error_msg( "Warning: file modified" );
+      
       if( is_regular_file( 0 ) )
         {
         if( verbose ) fprintf( stderr, "script, line %d: %s\n", linenum, errmsg );
@@ -684,15 +688,12 @@ int ed_loop( const char loose )
     else if( ibufp[len-1] != '\n' )	/* discard line */
       { set_error_msg( "Unexpected end-of-file" ); status = ERR; continue; }
     else ++linenum;
+        
     old_status = status;
     status = exec_command( 0 );
     
-    
-    
-    print_info_message("status %d", status);
-    
-    
-    
+    //print_info_message("executed, status: %d", status); read_key();
+
     if( status == 0 ) continue;
     if( status == -1 ) return err_status;
     if( status == EMOD )
@@ -700,6 +701,7 @@ int ed_loop( const char loose )
       if( old_status == EMOD ) return err_status;
       fputs( "?\n", stderr );				/* give warning */
       set_error_msg( "Warning: file modified" );
+      print_info_message("Warning: file modified"); read_key();
       if( is_regular_file( 0 ) )
         {
         if( verbose ) fprintf( stderr, "script, line %d: %s\n", linenum, errmsg );
