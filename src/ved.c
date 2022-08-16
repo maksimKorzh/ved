@@ -13,7 +13,6 @@ int cury = 0;
 int curx = 0;
 int tabsx = 0;
 int lastx = 0;
-int total_lines = 0;
 int row_offset = 0;
 int col_offset = 0;
 
@@ -67,7 +66,7 @@ void print_status_bar(struct buffer *buf) {
 
 /* print intro */
 int print_intro_line(struct buffer * buf, char *line, int row, int offset, char * arg) {
-    if (total_lines == 0 && row == (ROWS / 3) + offset) {
+    if (last_addr() == 0 && row == (ROWS / 3) + offset) {
         char welcome[80];
         int welcomelen = snprintf(welcome, sizeof(welcome), "%s%s", line, arg);
         if (welcomelen > COLS) welcomelen = COLS;
@@ -85,18 +84,8 @@ int print_intro_line(struct buffer * buf, char *line, int row, int offset, char 
 /* print display buffer */
 void print_buffer(struct buffer *buf) {
   for (int row = 0; row < ROWS; row++) {
-    
-    
-    
-    line_t *lp = search_line_node(1);
-    char *line = get_sbuf_line(lp);
-    //clear_screen(); printf("%s", line); exit(0);
-    if (row == 2) append_buffer(buf, line, lp->len);
-    
-    
-    
-    int bufrow = row + row_offset;
-    if (bufrow >= total_lines) {
+    int bufrow = row + row_offset + 1;
+    if (bufrow >= last_addr()) {
            if (print_intro_line(buf, "VED - Visual EDitor", row, 0, "")) {}
       else if (print_intro_line(buf, "version ", row, 2, VERSION)) {}
       else if (print_intro_line(buf, "by Code Monkey King", row, 3, "")) {}
@@ -106,12 +95,12 @@ void print_buffer(struct buffer *buf) {
         append_buffer(buf, "~", 1);
       }
     } else {
-      //int len = buffer_head[bufrow]
-      
-      //int len = text[bufrow].rlen - col_offset;
-      //if (len < 0) len = 0;
-      //if (len > COLS) len = COLS;
-      //append_buffer(buf, &text[bufrow].render[col_offset], len);
+      line_t *lp = search_line_node(bufrow);
+      char *line = get_sbuf_line(lp);
+      int len = lp->len - col_offset;
+      if (len < 0) len = 0;
+      if (len > COLS) len = COLS;
+      append_buffer(buf, line + col_offset, len);
     }
     append_buffer(buf, CLEAR_LINE, 3);
     append_buffer(buf, "\r\n", 2);
