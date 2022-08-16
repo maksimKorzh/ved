@@ -121,7 +121,7 @@ int read_file( const char *filename, const int addr );
 int write_file( const char * const filename, const char * const mode,
                 const int from, const int to );
 int read_key();
-char *command_prompt(char *command);
+char *command_prompt(char *command, int *lenp);
 
 /* defined in main.c */
 char is_regular_file( int fd );
@@ -170,6 +170,8 @@ void raw_mode();
 void restore_terminal();
 
 /* defined in ved.c */
+void print_info_message(const char *fmt, ...);
+void print_message_bar(struct buffer *buf);
 void print_status_bar(struct buffer *buf);
 void print_buffer(struct buffer *buf);
 void append_buffer(struct buffer *buf, const char *string, int len);

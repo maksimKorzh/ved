@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "ed.h"
 
@@ -22,7 +23,27 @@ struct buffer {
   int len;
 };
 
-// draw status bar
+/* info message */
+char info_message[80];
+
+/* display command prompt */
+void print_info_message(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(info_message, sizeof(info_message), fmt, ap);
+  va_end(ap);
+}
+
+/* print message bar */
+void print_message_bar(struct buffer *buf) {
+  append_buffer(buf, CLEAR_LINE, 3);
+  int msglen = strlen(info_message);
+  if (msglen > COLS) msglen = COLS;
+  //if (msglen && time(NULL) - info_time < 5)
+  if (msglen) append_buffer(buf, info_message, msglen);
+}
+
+/* draw status bar */
 void print_status_bar(struct buffer *buf) {
   append_buffer(buf, INVERT_VIDEO, 4);
   char message_left[80]; char message_right[80];
@@ -114,7 +135,7 @@ void update_screen() {
   append_buffer(&buf, RESET_CURSOR, 3);
   print_buffer(&buf);
   print_status_bar(&buf);
-  //print_message_bar(&buf);
+  print_message_bar(&buf);
   char curpos[32];
   snprintf(curpos, sizeof(curpos), SET_CURSOR, (cury - row_offset) + 1, (tabsx - col_offset) + 1);
   append_buffer(&buf, curpos, strlen(curpos));
@@ -124,10 +145,12 @@ void update_screen() {
 }
 
 /* process keypress */
-void read_keyboard() {
+void read_keyboard(int loose) {
   int c = read_key();
   switch(c) {
     case (('q') & 0x1f): clear_screen(); exit(0); break;
+    //case ':': {int i = 0; command_prompt(":%s", &i);}
+    case ':': ed_loop(loose);
     //case '\r': insert_new_line(); break;
     //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
     //default: insert_char(c); break;
@@ -142,11 +165,11 @@ void init_ved() {
 }
 
 /* visual editor loop */
-int ved_loop() {
+int ved_loop(int loose) {
   init_ved();
   //return 0;
   while (1) {
     update_screen();
-    read_keyboard();
+    read_keyboard(loose);
   }
 }

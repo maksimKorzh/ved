@@ -666,8 +666,15 @@ int ed_loop( const char loose )
     {
     if( status < 0 && verbose ) fprintf( stderr, "%s\n", errmsg );
     if( prompt_on ) { /*printf( "%s", prompt_str ); fflush( stdout );*/ }
-    ibufp = get_tty_line( &len );
-    if( !ibufp ) return err_status;
+    
+    //ibufp = get_tty_line( &len );
+    //if( !ibufp ) return err_status;
+    
+    ibufp = command_prompt(":%s", &len);
+    if (!ibufp) return err_status;
+    
+    //clear_screen(); printf("got input: %s %d\n\r", ibufp, ibufp[len-1]); while(1) {}
+    
     if( !len )
       {
       if( !modified() || scripted() ) return err_status;

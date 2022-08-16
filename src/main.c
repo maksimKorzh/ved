@@ -194,7 +194,6 @@ int main( const int argc, const char *argv[] )
     break;
     }
   ap_free( &parser );
-  ved_loop();
+  ved_loop(loose);
   return 0;
-  //return ed_loop( loose );
   }
