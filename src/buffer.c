@@ -121,7 +121,8 @@ char append_lines( const char *ibufp, const int addr, const char isglobal )
     {
     if( !isglobal )
       {
-      ibufp = get_tty_line( &len );
+      //ibufp = get_tty_line( &len );
+      ibufp = command_prompt(">%s", &len);
       if( !ibufp ) return 0;
       if( !len || ibufp[len-1] != '\n' ) { clearerr( stdin ); return !len; }
       }

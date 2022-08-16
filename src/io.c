@@ -342,7 +342,7 @@ char *command_prompt(char *command, int *lenp) {
       return NULL;
     } else if (c == '\r') {
       if (buflen != 0) {
-        print_info_message("");
+        //print_info_message("");
         buf[buflen++] = '\n';
         buf[buflen] = '\0';
         *lenp = buflen;

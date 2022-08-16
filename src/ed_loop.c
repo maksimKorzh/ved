@@ -398,6 +398,7 @@ static int exec_command( const char isglobal )
   const int addr_cnt = extract_addr_range(); if( addr_cnt < 0 ) return ERR;
   ibufp = skip_blanks( ibufp );
   c = *ibufp++;
+
   switch( c )
     {
     case 'a': if( !get_command_suffix( &gflags ) ) return ERR;
@@ -657,24 +658,18 @@ int ed_loop( const char loose )
   volatile int linenum = 0;			/* script line number */
   int len, status, old_status;
 
-  disable_interrupts();
+  /*disable_interrupts();
   set_signals();
   status = setjmp( jmp_state );
   if( !status ) enable_interrupts();
-  else { status = -1; fputs( "\n?\n", stderr ); set_error_msg( "Interrupt" ); }
+  else { status = -1; fputs( "\n?\n", stderr ); set_error_msg( "Interrupt" ); }*/
   while( 1 )
     {
     if( status < 0 && verbose ) fprintf( stderr, "%s\n", errmsg );
     if( prompt_on ) { /*printf( "%s", prompt_str ); fflush( stdout );*/ }
-    
-    //ibufp = get_tty_line( &len );
-    //if( !ibufp ) return err_status;
-    
+        
     ibufp = command_prompt(":%s", &len);
     if (!ibufp) return err_status;
-    
-    //clear_screen(); printf("got input: %s %d\n\r", ibufp, ibufp[len-1]); while(1) {}
-    
     if( !len )
       {
       if( !modified() || scripted() ) return err_status;
@@ -691,6 +686,13 @@ int ed_loop( const char loose )
     else ++linenum;
     old_status = status;
     status = exec_command( 0 );
+    
+    
+    
+    print_info_message("status %d", status);
+    
+    
+    
     if( status == 0 ) continue;
     if( status == -1 ) return err_status;
     if( status == EMOD )

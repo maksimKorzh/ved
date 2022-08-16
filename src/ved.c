@@ -149,8 +149,13 @@ void read_keyboard(int loose) {
   int c = read_key();
   switch(c) {
     case (('q') & 0x1f): clear_screen(); exit(0); break;
-    //case ':': {int i = 0; command_prompt(":%s", &i);}
-    case ':': ed_loop(loose);
+    case ':': {
+        int status = ed_loop(loose);
+        if (status) {
+            clear_screen();
+            exit(status);
+        }
+    }
     //case '\r': insert_new_line(); break;
     //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
     //default: insert_char(c); break;
