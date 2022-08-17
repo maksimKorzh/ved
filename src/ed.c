@@ -1,22 +1,24 @@
-/*  GNU ed - The GNU line editor.
-    Copyright (C) 1993, 1994 Andrew Moore, Talke Studio
-    Copyright (C) 2006, 2007, 2008, 2009 Antonio Diaz Diaz.
+/* GNU ed - The GNU line editor.
+   Copyright (C) 1993, 1994 Andrew Moore, Talke Studio
+   Copyright (C) 2006-2022 Antonio Diaz Diaz.
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 2 of the License, or
+   (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <ctype.h>
+#include <errno.h>
+#include <limits.h>
 #include <setjmp.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,51 +27,69 @@
 #include "ed.h"
 
 
-enum Status { ERR = -2, EMOD = -3, FATAL = -4 };
-char mode = 'v'; // modes: 'e' - ed command move; 'v' - visual mode 
+enum Status { QUIT = -1, ERR = -2, EMOD = -3, FATAL = -4 };
+char mode = 'v'; // modes: 'e' - ed command move; 'v' - visual mode
 
-static char def_filename[1024] = "";	/* default filename */
+static const char * const inv_com_suf = "Invalid command suffix";
+static const char * const inv_mark_ch = "Invalid mark character";
+static const char * const no_cur_fn   = "No current filename";
+static const char * const no_prev_com = "No previous command";
+static const char * def_filename = "";	/* default filename */
 static char errmsg[80] = "";		/* error message buffer */
-static char prompt_str[80] = "*";	/* command-line prompt */
-static const char *ibufp = 0;		/* pointer to ed command-line buffer */
-static char *shcmd = 0;			/* shell command buffer */
-static int shcmdsz = 0;			/* shell command buffer size */
-static int shcmdlen = 0;		/* shell command length */
+static const char * prompt_str = "*";	/* command prompt */
 static int first_addr = 0, second_addr = 0;
-static char verbose = 0;		/* if set, print all error messages */
-static char prompt_on = 0;		/* if set, show command-line prompt */
+static bool prompt_on = false;		/* if set, show command prompt */
+static bool verbose = false;		/* if set, print all error messages */
 
 
-void set_def_filename( const char *s )
+void invalid_address( void ) { set_error_msg( "Invalid address" ); }
+
+bool set_def_filename( const char * const s )
   {
-  strncpy( def_filename, s, sizeof( def_filename ) );
-  def_filename[sizeof(def_filename)-1] = 0;
+  static char * buf = 0;		/* filename buffer */
+  static int bufsz = 0;			/* filename buffer size */
+  const int len = strlen( s );
+  if( !resize_buffer( &buf, &bufsz, len + 1 ) ) return false;
+  memcpy( buf, s, len + 1 );
+  def_filename = buf;
+  return true;
   }
 
-void set_prompt( const char *s )
+void set_error_msg( const char * const msg )
   {
-  prompt_on = 1;
-  strncpy( prompt_str, s, sizeof( prompt_str ) );
-  prompt_str[sizeof(prompt_str)-1] = 0;
+  strncpy( errmsg, msg, sizeof errmsg );
+  errmsg[sizeof(errmsg)-1] = 0;
   }
 
-void set_verbose( void ) { verbose = 1; }
+bool set_prompt( const char * const s )
+  {
+  static char * buf = 0;		/* prompt buffer */
+  static int bufsz = 0;			/* prompt buffer size */
+  const int len = strlen( s );
+  if( !resize_buffer( &buf, &bufsz, len + 1 ) ) return false;
+  memcpy( buf, s, len + 1 );
+  prompt_str = buf;
+  prompt_on = true;
+  return true;
+  }
+
+void set_verbose( void ) { verbose = true; }
 
 
-static const line_t *mark[26];			/* line markers */
+static const line_t * mark[26];			/* line markers */
 static int markno;				/* line marker count */
 
-static char mark_line_node( const line_t *lp, int c )
+static bool mark_line_node( const line_t * const lp, int c )
   {
   c -= 'a';
-  if( c < 0 || c >= 26 ) { set_error_msg( "Invalid mark character" ); return 0; }
+  if( c < 0 || c >= 26 ) { set_error_msg( inv_mark_ch ); return false; }
   if( !mark[c] ) ++markno;
   mark[c] = lp;
-  return 1;
+  return true;
   }
 
 
-void unmark_line_node( const line_t *lp )
+void unmark_line_node( const line_t * const lp )
   {
   int i;
   for( i = 0; markno && i < 26; ++i )
@@ -82,369 +102,447 @@ void unmark_line_node( const line_t *lp )
 static int get_marked_node_addr( int c )
   {
   c -= 'a';
-  if( c < 0 || c >= 26 )
-    { set_error_msg( "Invalid mark character" ); return -1; }
-  return get_line_node_addr( mark[c]);
+  if( c < 0 || c >= 26 ) { set_error_msg( inv_mark_ch ); return -1; }
+  return get_line_node_addr( mark[c] );
   }
 
 
-/* read a shell command from stdin; return substitution status ( -1, 0, +1 ) */
-static int get_shell_command( void )
+/* return pointer to copy of shell command in the command buffer */
+static const char * get_shell_command( const char ** const ibufpp )
   {
-  static char *buf = 0;
+  static char * buf = 0;		/* temporary buffer */
   static int bufsz = 0;
-  const char *s;			/* substitution char pointer */
-  int i = 0, len;
+  static char * shcmd = 0;		/* shell command buffer */
+  static int shcmdsz = 0;		/* shell command buffer size */
+  static int shcmdlen = 0;		/* shell command length */
+  int i = 0, len = 0;
+  bool replacement = false;		/* true if '!' or '%' are replaced */
 
-  if( restricted() ) { set_error_msg( "Shell access restricted" ); return -1; }
-  s = ibufp = get_extended_line( ibufp, &len, 1 );
-  if( !s ) return -1;
-  if( !resize_buffer( &buf, &bufsz, len + 1 ) ) return -1;
-  buf[i++] = '!';		/* prefix command w/ bang */
-  while( *ibufp != '\n' )
+  if( restricted() ) { set_error_msg( "Shell access restricted" ); return 0; }
+  if( !get_extended_line( ibufpp, &len, true ) ) return 0;
+  if( !resize_buffer( &buf, &bufsz, len + 1 ) ) return 0;
+  if( **ibufpp != '!' ) buf[i++] = '!';		/* prefix command w/ bang */
+  else				/* replace '!' with the previous command */
     {
-    if( *ibufp == '!' )
+    if( shcmdlen <= 0 || ( traditional() && !shcmd[1] ) )
+      { set_error_msg( no_prev_com ); return 0; }
+    memcpy( buf, shcmd, shcmdlen );		/* bufsz >= shcmdlen */
+    i += shcmdlen; ++*ibufpp; replacement = true;
+    }
+  while( **ibufpp != '\n' )
+    {
+    if( **ibufpp == '%' )	/* replace '%' with the default filename */
       {
-      if( s != ibufp )
-        {
-        if( !resize_buffer( &buf, &bufsz, i + 1 ) ) return -1;
-        buf[i++] = *ibufp++;
-        }
-      else if( !shcmd || ( traditional() && !*( shcmd + 1 ) ) )
-        { set_error_msg( "No previous command" ); return -1; }
-      else
-        {
-        if( !resize_buffer( &buf, &bufsz, i + shcmdlen ) ) return -1;
-        for( s = shcmd + 1; s < shcmd + shcmdlen; ) buf[i++] = *s++;
-        s = ibufp++;
-        }
+      const char * p;
+      if( !def_filename[0] ) { set_error_msg( no_cur_fn ); return 0; }
+      p = strip_escapes( def_filename );
+      if( !p ) return 0;
+      len = strlen( p );
+      if( !resize_buffer( &buf, &bufsz, i + len ) ) return 0;
+      memcpy( buf + i, p, len );
+      i += len; ++*ibufpp; replacement = true;
       }
-    else if( *ibufp == '%' )
+    else		/* copy char or escape sequence unescaping any '%' */
       {
-      if( !def_filename[0] )
-        { set_error_msg( "No current filename" ); return -1; }
-      len = strlen( s = strip_escapes( def_filename ) );
-      if( !resize_buffer( &buf, &bufsz, i + len ) ) return -1;
-      while( len-- ) buf[i++] = *s++;
-      s = ibufp++;
-      }
-    else
-      {
-      if( !resize_buffer( &buf, &bufsz, i + 2 ) ) return -1;
-      buf[i++] = *ibufp;
-      if( *ibufp++ == '\\' ) buf[i++] = *ibufp++;
+      char ch = *(*ibufpp)++;
+      if( !resize_buffer( &buf, &bufsz, i + 2 ) ) return 0;
+      if( ch != '\\' ) { buf[i++] = ch; continue; }	/* normal char */
+      ch = *(*ibufpp)++; if( ch != '%' ) buf[i++] = '\\';
+      buf[i++] = ch;
       }
     }
-  if( !resize_buffer( &shcmd, &shcmdsz, i + 1 ) ) return -1;
+  while( **ibufpp == '\n' ) ++*ibufpp;			/* skip newline */
+  if( !resize_buffer( &shcmd, &shcmdsz, i + 1 ) ) return 0;
   memcpy( shcmd, buf, i );
-  shcmdlen = i; shcmd[i] = 0;
-  return ( *s == '!' || *s == '%' );
+  shcmd[i] = 0; shcmdlen = i;
+  if( replacement ) { printf( "%s\n", shcmd + 1 ); fflush( stdout ); }
+  return shcmd;
   }
 
 
-static const char *skip_blanks( const char *s )
+static const char * skip_blanks( const char * p )
   {
-  while( isspace( (unsigned char)*s ) && *s != '\n' ) ++s;
-  return s;
+  while( isspace( (unsigned char)*p ) && *p != '\n' ) ++p;
+  return p;
   }
 
 
 /* return pointer to copy of filename in the command buffer */
-static const char *get_filename( void )
+static const char * get_filename( const char ** const ibufpp,
+                                  const bool traditional_f_command )
   {
-  static char *buf = 0;
+  static char * buf = 0;
   static int bufsz = 0;
-  int size, n;
+  const int pmax = path_max( 0 );
+  int n;
 
-  ibufp = skip_blanks( ibufp );
-  if( *ibufp != '\n' )
+  *ibufpp = skip_blanks( *ibufpp );
+  if( **ibufpp != '\n' )
     {
-    ibufp = get_extended_line( ibufp, &size, 1 );
-    if( !ibufp ) return 0;
-    if( *ibufp == '!' )
-      {
-      ++ibufp;
-      n = get_shell_command();
-      if( n < 0 ) return 0;
-      if( n ) printf( "%s\n", shcmd + 1 );
-      return shcmd;
-      }
-    else if( size > path_max( 0 ) )
+    int size = 0;
+    if( !get_extended_line( ibufpp, &size, true ) ) return 0;
+    if( **ibufpp == '!' )
+      { ++*ibufpp; return get_shell_command( ibufpp ); }
+    else if( size > pmax )
       { set_error_msg( "Filename too long" ); return 0; }
     }
-  else if( !traditional() && !def_filename[0] )
-    { set_error_msg( "No current filename" ); return 0; }
-  if( !resize_buffer( &buf, &bufsz, path_max( 0 ) + 1 ) ) return 0;
-  for( n = 0; *ibufp != '\n'; ) buf[n++] = *ibufp++;
+  else if( !traditional_f_command && !def_filename[0] )
+    { set_error_msg( no_cur_fn ); return 0; }
+  if( !resize_buffer( &buf, &bufsz, pmax + 1 ) ) return 0;
+  for( n = 0; **ibufpp != '\n'; ++n, ++*ibufpp ) buf[n] = **ibufpp;
   buf[n] = 0;
+  while( **ibufpp == '\n' ) ++*ibufpp;			/* skip newline */
   return ( may_access_filename( buf ) ? buf : 0 );
   }
 
 
-static void invalid_address( void ) { set_error_msg( "Invalid address" ); }
-
-
-/* return the next line address in the command buffer */
-static int next_addr( int *addr_cnt )
+/* convert a string to int with out_of_range detection */
+static bool parse_int( int * const i, const char * const str,
+                       const char ** const tail )
   {
-  const char *hd = ibufp = skip_blanks( ibufp );
-  int addr = current_addr();
-  int first = 1;
+  char * tmp;
+  long li;
 
-  while( 1 )
+  errno = 0;
+  *i = li = strtol( str, &tmp, 10 );
+  if( tail ) *tail = tmp;
+  if( tmp == str )
+    {
+    set_error_msg( "Bad numerical result" );
+    *i = 0;
+    return false;
+    }
+  if( errno == ERANGE || li > INT_MAX || li < -INT_MAX )
+    {
+    set_error_msg( "Numerical result out of range" );
+    *i = 0;
+    return false;
+    }
+  return true;
+  }
+
+
+/* Get line addresses from the command buffer until an invalid address
+   is seen. Return the number of addresses read, or -1 if error.
+   If no addresses are found, both addresses are set to the current address.
+   If one address is found, both addresses are set to that address.
+*/
+static int extract_addresses( const char ** const ibufpp )
+  {
+  bool first = true;			/* true == addr, false == offset */
+
+  first_addr = second_addr = -1;	/* set to undefined */
+  *ibufpp = skip_blanks( *ibufpp );
+
+  while( true )
     {
     int n;
-    const unsigned char ch = *ibufp;
+    const unsigned char ch = **ibufpp;
     if( isdigit( ch ) )
       {
-      if( !first ) { invalid_address(); return -2; };
-      if( !parse_int( &addr, ibufp, &ibufp ) ) return -2;
+      if( !parse_int( &n, *ibufpp, ibufpp ) ) return -1;
+      if( first ) { first = false; second_addr = n; } else second_addr += n;
       }
     else switch( ch )
       {
-      case '+':
       case '\t':
-      case ' ':
-      case '-': ibufp = skip_blanks( ++ibufp );
-                if( isdigit( (unsigned char)*ibufp ) )
+      case ' ': *ibufpp = skip_blanks( ++*ibufpp ); break;
+      case '+':
+      case '-': if( first ) { first = false; second_addr = current_addr(); }
+                if( isdigit( (unsigned char)(*ibufpp)[1] ) )
                   {
-                  if( !parse_int( &n, ibufp, &ibufp ) ) return -2;
-                  addr += ( ( ch == '-' ) ? -n : n );
+                  if( !parse_int( &n, *ibufpp, ibufpp ) ) return -1;
+                  second_addr += n;
                   }
-                else if( ch == '+' ) ++addr;
-                else if( ch == '-' ) --addr;
+                else { ++*ibufpp;
+                       if( ch == '+' ) ++second_addr; else --second_addr; }
                 break;
       case '.':
-      case '$': if( !first ) { invalid_address(); return -2; };
-                ++ibufp; addr = ( ( ch == '.' ) ? current_addr() : last_addr() );
+      case '$': if( !first ) { invalid_address(); return -1; };
+                first = false; ++*ibufpp;
+                second_addr = ( ( ch == '.' ) ? current_addr() : last_addr() );
                 break;
       case '/':
-      case '?': if( !first ) { invalid_address(); return -2; };
-                addr = get_matching_node_addr( &ibufp, ch == '/' );
-                if( addr < 0 ) return -2;
-                if( ch == *ibufp ) ++ibufp;
-                break;
-      case '\'':if( !first ) { invalid_address(); return -2; };
-                ++ibufp; addr = get_marked_node_addr( *ibufp++ );
-                if( addr < 0 ) return -2;
+      case '?': if( !first ) { invalid_address(); return -1; };
+                second_addr = next_matching_node_addr( ibufpp );
+                if( second_addr < 0 ) return -1;
+                first = false; break;
+      case '\'':if( !first ) { invalid_address(); return -1; };
+                first = false; ++*ibufpp;
+                second_addr = get_marked_node_addr( *(*ibufpp)++ );
+                if( second_addr < 0 ) return -1;
                 break;
       case '%':
       case ',':
       case ';': if( first )
                   {
-                  ++ibufp; ++*addr_cnt;
-                  second_addr = ( ( ch == ';' ) ? current_addr() : 1 );
-                  addr = last_addr();
-                  break;
-                  }				/* FALL THROUGH */
-      default:  if( ibufp == hd ) return -1;	/* EOF */
-                if( addr < 0 || addr > last_addr() )
-                  { invalid_address(); return -2; }
-                ++*addr_cnt; return addr;
+                  if( first_addr < 0 )
+                    { first_addr = ( ( ch == ';' ) ? current_addr() : 1 );
+                      second_addr = last_addr(); }
+                  else first_addr = second_addr;
+                  }
+                else
+                  {
+                  if( second_addr < 0 || second_addr > last_addr() )
+                    { invalid_address(); return -1; }
+                  if( ch == ';' ) set_current_addr( second_addr );
+                  first_addr = second_addr; first = true;
+                  }
+                ++*ibufpp;
+                break;
+      default :
+        if( !first && ( second_addr < 0 || second_addr > last_addr() ) )
+          { invalid_address(); return -1; }
+        {
+        int addr_cnt = 0;			/* limited to 2 */
+        if( second_addr >= 0 ) addr_cnt = ( first_addr >= 0 ) ? 2 : 1;
+        if( addr_cnt <= 0 ) second_addr = current_addr();
+        if( addr_cnt <= 1 ) first_addr = second_addr;
+        return addr_cnt;
+        }
       }
-    first = 0;
     }
-  }
-
-
-/* get line addresses from the command buffer until an invalid address
-   is seen. Return number of addresses read */
-static int extract_addr_range( void )
-  {
-  int addr;
-  int addr_cnt = 0;
-
-  first_addr = second_addr = current_addr();
-  while( ( addr = next_addr( &addr_cnt ) ) >= 0 )
-    {
-    first_addr = second_addr; second_addr = addr;
-    if( *ibufp != ',' && *ibufp != ';' ) break;
-    if( *ibufp++ == ';' ) set_current_addr( addr );
-    }
-  if( addr_cnt == 1 || second_addr != addr ) first_addr = second_addr;
-  return ( ( addr != -2 ) ? addr_cnt : -1 );
   }
 
 
 /* get a valid address from the command buffer */
-static char get_third_addr( int *addr )
+static bool get_third_addr( const char ** const ibufpp, int * const addr )
   {
-  int ol1 = first_addr;
-  int ol2 = second_addr;
+  const int old1 = first_addr;
+  const int old2 = second_addr;
+  int addr_cnt = extract_addresses( ibufpp );
 
-  int addr_cnt = extract_addr_range(); if( addr_cnt < 0 ) return 0;
+  if( addr_cnt < 0 ) return false;
   if( traditional() && addr_cnt == 0 )
-    { set_error_msg( "Destination expected" ); return 0; }
+    { set_error_msg( "Destination expected" ); return false; }
   if( second_addr < 0 || second_addr > last_addr() )
-    { invalid_address(); return 0; }
+    { invalid_address(); return false; }
   *addr = second_addr;
-  first_addr = ol1; second_addr = ol2;
-  return 1;
+  first_addr = old1; second_addr = old2;
+  return true;
   }
 
 
-/* return true if address range is valid */
-static char check_addr_range( const int n, const int m, const int addr_cnt )
+/* set default range and return true if address range is valid */
+static bool check_addr_range( const int n, const int m, const int addr_cnt )
   {
-  if( addr_cnt == 0 )
-    {
-    first_addr = ( ( n >= 0 ) ? n : current_addr() );
-    second_addr = ( ( m >= 0 ) ? m : current_addr() );
-    }
+  if( addr_cnt == 0 ) { first_addr = n; second_addr = m; }
   if( first_addr < 1 || first_addr > second_addr || second_addr > last_addr() )
-    { invalid_address(); return 0; }
-  return 1;
+    { invalid_address(); return false; }
+  return true;
+  }
+
+/* set defaults to current_addr and return true if address range is valid */
+static bool check_addr_range2( const int addr_cnt )
+  {
+  return check_addr_range( current_addr(), current_addr(), addr_cnt );
+  }
+
+/* set default second_addr and return true if second_addr is valid */
+static bool check_second_addr( const int addr, const int addr_cnt )
+  {
+  if( addr_cnt == 0 ) second_addr = addr;
+  if( second_addr < 1 || second_addr > last_addr() )
+    { invalid_address(); return false; }
+  return true;
   }
 
 
-/* verify the command suffix in the command buffer */
-static char get_command_suffix( int *gflagsp )
+/* verify the command suffixes in the command buffer */
+static bool get_command_suffix( const char ** const ibufpp,
+                                int * const pflagsp )
   {
-  while( 1 )
+  while( true )
     {
-    const char ch = *ibufp;
-    if( ch == 'l' ) *gflagsp |= GLS;
-    else if( ch == 'n' ) *gflagsp |= GNP;
-    else if( ch == 'p' ) *gflagsp |= GPR;
+    const unsigned char ch = **ibufpp;
+    if( ch == 'l' ) { if( *pflagsp & pf_l ) break; else *pflagsp |= pf_l; }
+    else if( ch == 'n' ) { if( *pflagsp & pf_n ) break; else *pflagsp |= pf_n; }
+    else if( ch == 'p' ) { if( *pflagsp & pf_p ) break; else *pflagsp |= pf_p; }
     else break;
-    ++ibufp;
+    ++*ibufpp;
     }
-  if( *ibufp++ != '\n' )
-    { set_error_msg( "Invalid command suffix" ); return 0; }
-  return 1;
+  if( *(*ibufpp)++ != '\n' ) { set_error_msg( inv_com_suf ); return false; }
+  return true;
   }
 
 
-static char unexpected_address( const int addr_cnt )
+/* verify the command suffixes for command s in the command buffer */
+static bool get_command_s_suffix( const char ** const ibufpp,
+                                  int * const pflagsp, int * const snump,
+                                  bool * const ignore_casep )
   {
-  if( addr_cnt > 0 ) { set_error_msg( "Unexpected address" ); return 1; }
-  return 0;
+  bool rep = false;			/* repeated g/count */
+  bool error = false;
+  while( true )
+    {
+    const unsigned char ch = **ibufpp;
+    if( ch >= '1' && ch <= '9' )
+      {
+      int n = 0;
+      if( rep || !parse_int( &n, *ibufpp, ibufpp ) || n <= 0 )
+        { error = true; break; }
+      rep = true; *snump = n; continue;
+      }
+    else if( ch == 'g' )
+      { if( rep ) break; else { rep = true; *snump = 0; } }
+    else if( ch == 'i' || ch == 'I' )
+      { if( *ignore_casep ) break; else *ignore_casep = true; }
+    else if( ch == 'l' ) { if( *pflagsp & pf_l ) break; else *pflagsp |= pf_l; }
+    else if( ch == 'n' ) { if( *pflagsp & pf_n ) break; else *pflagsp |= pf_n; }
+    else if( ch == 'p' ) { if( *pflagsp & pf_p ) break; else *pflagsp |= pf_p; }
+    else break;
+    ++*ibufpp;
+    }
+  if( error || *(*ibufpp)++ != '\n' )
+    { set_error_msg( inv_com_suf ); return false; }
+  return true;
   }
 
-static char unexpected_command_suffix( const unsigned char ch )
+
+static bool unexpected_address( const int addr_cnt )
+  {
+  if( addr_cnt > 0 ) { set_error_msg( "Unexpected address" ); return true; }
+  return false;
+  }
+
+static bool unexpected_command_suffix( const unsigned char ch )
   {
   if( !isspace( ch ) )
-    { set_error_msg( "Unexpected command suffix" ); return 1; }
-  return 0;
+    { set_error_msg( "Unexpected command suffix" ); return true; }
+  return false;
   }
 
 
-static char command_s( int *gflagsp, const int addr_cnt, const char isglobal )
+static bool command_s( const char ** const ibufpp, int * const pflagsp,
+                       const int addr_cnt, const bool isglobal )
   {
-  static int gflags = 0;
-  static int snum = 0;
+  static int pflags = 0;	/* print suffixes */
+  static int pmask = pf_p;	/* the print suffixes to be toggled */
+  static int snum = 1;		/* > 0 count, <= 0 global substitute */
   enum Sflags {
-    SGG = 0x01,		/* complement previous global substitute suffix */
-    SGP = 0x02,		/* complement previous print suffix */
-    SGR = 0x04,		/* use last regex instead of last pat */
-    SGF = 0x08		/* repeat last substitution */
-    } sflags = 0;
+    sf_g = 0x01,	/* complement previous global substitute suffix */
+    sf_p = 0x02,	/* complement previous print suffix */
+    sf_r = 0x04,	/* use regex of last search (if newer) */
+    sf_none = 0x08	/* make sflags != 0 if no flags at all */
+    } sflags = 0;	/* if sflags != 0, repeat last substitution */
 
+  if( !check_addr_range2( addr_cnt ) ) return false;
   do {
-    if( isdigit( (unsigned char)*ibufp ) )
+    bool error = false;
+    if( **ibufpp >= '1' && **ibufpp <= '9' )
       {
-      if( !parse_int( &snum, ibufp, &ibufp ) ) return 0;
-      sflags |= SGF; gflags &= ~GSG;		/* override GSG */
+      int n = 0;
+      if( ( sflags & sf_g ) || !parse_int( &n, *ibufpp, ibufpp ) || n <= 0 )
+        error = true;
+      else
+        { sflags |= sf_g; snum = n; }
       }
-    else switch( *ibufp )
+    else switch( **ibufpp )
       {
-      case '\n':sflags |= SGF; break;
-      case 'g': sflags |= SGG; ++ibufp; break;
-      case 'p': sflags |= SGP; ++ibufp; break;
-      case 'r': sflags |= SGR; ++ibufp; break;
-      default:  if( sflags )
-                  { set_error_msg( "Invalid command suffix" ); return 0; }
+      case '\n':sflags |= sf_none; break;
+      case 'g': if( sflags & sf_g ) error = true;
+                else { sflags |= sf_g; snum = !snum; ++*ibufpp; }
+                break;
+      case 'p': if( sflags & sf_p ) error = true;
+                else { sflags |= sf_p; ++*ibufpp; } break;
+      case 'r': if( sflags & sf_r ) error = true;
+                else { sflags |= sf_r; ++*ibufpp; } break;
+      default : if( sflags ) error = true;
       }
+    if( error ) { set_error_msg( inv_com_suf ); return false; }
     }
-  while( sflags && *ibufp != '\n' );
-  if( sflags && !prev_pattern() )
-    { set_error_msg( "No previous substitution" ); return 0; }
-  if( sflags & SGG ) snum = 0;			/* override numeric arg */
-  if( *ibufp != '\n' && ibufp[1] == '\n' )
-    { set_error_msg( "Invalid pattern delimiter" ); return 0; }
-  if( ( !sflags || ( sflags & SGR ) ) && !new_compiled_pattern( &ibufp ) )
-    return 0;
-  if( !sflags && !extract_subst_tail( &ibufp, &gflags, &snum, isglobal ) )
-    return 0;
-  if( isglobal ) gflags |= GLB;
-  else gflags &= ~GLB;
-  if( sflags & SGG ) gflags ^= GSG;
-  if( sflags & SGP ) { gflags ^= GPR; gflags &= ~( GLS | GNP ); }
-  switch( *ibufp )
+  while( sflags && **ibufpp != '\n' );
+  if( sflags )
     {
-    case 'l': gflags |= GLS; ++ibufp; break;
-    case 'n': gflags |= GNP; ++ibufp; break;
-    case 'p': gflags |= GPR; ++ibufp; break;
+    if( !subst_regex() ) { set_error_msg( no_prev_subst ); return false; }
+    if( ( sflags & sf_r ) && !replace_subst_re_by_search_re() ) return false;
+    if( sflags & sf_p ) pflags ^= pmask;
     }
-  if( !check_addr_range( -1, -1, addr_cnt ) ) return 0;
-  if( !get_command_suffix( gflagsp ) ) return 0;
+  else			/* don't compile RE until suffix 'I' is parsed */
+    {
+    const char * pat = get_pattern_for_s( ibufpp );
+    if( !pat ) return false;
+    const char delimiter = **ibufpp;
+    if( !extract_replacement( ibufpp, isglobal ) ) return false;
+    pflags = 0; snum = 1;
+    bool ignore_case = false;
+    if( **ibufpp == '\n' ) pflags = pf_p;	/* omitted last delimiter */
+    else
+      { if( **ibufpp == delimiter ) ++*ibufpp;		/* skip delimiter */
+        if( !get_command_s_suffix( ibufpp, &pflags, &snum, &ignore_case ) )
+          return false; }
+    pmask = pflags & ( pf_l | pf_n | pf_p ); if( pmask == 0 ) pmask = pf_p;
+    if( !set_subst_regex( pat, ignore_case ) ) return false;
+    }
+  *pflagsp = pflags;
   if( !isglobal ) clear_undo_stack();
-  if( !search_and_replace( first_addr, second_addr, gflags, snum, isglobal ) )
-    return 0;
-  if( ( gflags & ( GPR | GLS | GNP ) ) &&
-      !display_lines( current_addr(), current_addr(), gflags ) )
-    return 0;
-  return 1;
+  if( !search_and_replace( first_addr, second_addr, snum, isglobal ) )
+    return false;
+  return true;
   }
 
 
-static char exec_global( const char *ibufp2, int gflags, const char interact );
-/* execute the next command in command buffer; return error status */
-static int exec_command( const char isglobal )
-  {
-  const char *fnp;
-  int gflags = 0;
-  int addr, c, n;
+static int exec_global( const char ** const ibufpp, const int pflags,
+                        const bool interactive );
 
-  const int addr_cnt = extract_addr_range(); if( addr_cnt < 0 ) return ERR;
-  ibufp = skip_blanks( ibufp );
-  c = *ibufp++; //print_info_message("execute command: %c", c);
+/* execute the next command in command buffer; return error status */
+static int exec_command( const char ** const ibufpp, const int prev_status,
+                         const bool isglobal )
+  {
+  const char * fnp;				/* filename */
+  int pflags = 0;				/* print suffixes */
+  int addr, c, n;
+  const int addr_cnt = extract_addresses( ibufpp );
+
+  if( addr_cnt < 0 ) return ERR;
+  *ibufpp = skip_blanks( *ibufpp );
+  c = *(*ibufpp)++;
   switch( c )
     {
-    case 'a': if( !get_command_suffix( &gflags ) ) return ERR;
+    case 'a': if( !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
-              if( !append_lines( ibufp, second_addr, isglobal ) ) return ERR;
-              ibufp = "";
+              if( !append_lines( ibufpp, second_addr, false, isglobal ) )
+                return ERR;
               break;
-    case 'c': if( first_addr == 0 ) first_addr = 1;
-              if( second_addr == 0 ) second_addr = 1;
-              if( !check_addr_range( -1, -1, addr_cnt ) ||
-                  !get_command_suffix( &gflags ) ) return ERR;
+    case 'c': if( !check_addr_range2( addr_cnt ) ||
+                  !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
               if( !delete_lines( first_addr, second_addr, isglobal ) ||
-                  !append_lines( ibufp, current_addr(), isglobal ) ) return ERR;
-              ibufp = "";
-              break;
-    case 'd': if( !check_addr_range( -1, -1, addr_cnt ) ||
-                  !get_command_suffix( &gflags ) ) return ERR;
-              if( !isglobal ) clear_undo_stack();
-              if( !delete_lines( first_addr, second_addr, isglobal ) ) return ERR;
-              inc_current_addr();
-              break;
-    case 'e': if( modified() && !scripted() ) return EMOD;	/* fall through */
-    case 'E': if( unexpected_address( addr_cnt ) ||
-                  unexpected_command_suffix( *ibufp ) ) return ERR;
-              fnp = get_filename();
-              if( !fnp || !get_command_suffix( &gflags ) ||
-                  !delete_lines( 1, last_addr(), isglobal ) ) return ERR;
-              if( !close_sbuf() ) return ERR;
-              if( !open_sbuf() ) return FATAL;
-              if( fnp[0] && fnp[0] != '!' ) set_def_filename( fnp );
-              if( traditional() && !fnp[0] && !def_filename[0] )
-                { set_error_msg( "No current filename" ); return ERR; }
-              if( read_file( fnp[0] ? fnp : def_filename, 0 ) < 0 )
+                  !append_lines( ibufpp, current_addr(),
+                                 current_addr() >= first_addr, isglobal ) )
                 return ERR;
-              reset_undo_state(); set_modified( 0 );
+              break;
+    case 'd': if( !check_addr_range2( addr_cnt ) ||
+                  !get_command_suffix( ibufpp, &pflags ) ) return ERR;
+              if( !isglobal ) clear_undo_stack();
+              if( !delete_lines( first_addr, second_addr, isglobal ) )
+                return ERR;
+              break;
+    case 'e': if( modified() && prev_status != EMOD ) return EMOD;
+              /* fall through */
+    case 'E': if( unexpected_address( addr_cnt ) ||
+                  unexpected_command_suffix( **ibufpp ) ) return ERR;
+              fnp = get_filename( ibufpp, false );
+              if( !fnp || !delete_lines( 1, last_addr(), isglobal ) ||
+                  !close_sbuf() ) return ERR;
+              if( !open_sbuf() ) return FATAL;
+              if( fnp[0] && fnp[0] != '!' && !set_def_filename( fnp ) )
+                return ERR;
+              if( read_file( fnp[0] ? fnp : def_filename, 0 ) < 0 ) return ERR;
+              reset_undo_state(); set_modified( false );
               break;
     case 'f': if( unexpected_address( addr_cnt ) ||
-                  unexpected_command_suffix( *ibufp ) ) return ERR;
-              fnp = get_filename();
+                  unexpected_command_suffix( **ibufpp ) ) return ERR;
+              fnp = get_filename( ibufpp, traditional() );
               if( !fnp ) return ERR;
               if( fnp[0] == '!' )
                 { set_error_msg( "Invalid redirection" ); return ERR; }
-              if( !get_command_suffix( &gflags ) ) return ERR;
-              if( fnp[0] ) set_def_filename( fnp );
-              printf( "%s\n", strip_escapes( def_filename ) );
+              if( fnp[0] && !set_def_filename( fnp ) ) return ERR;
+              {
+              const char * const stripped_name = strip_escapes( def_filename );
+              if( !stripped_name ) return ERR;
+              printf( "%s\n", stripped_name );
+              }
               break;
     case 'g':
     case 'v':
@@ -453,52 +551,50 @@ static int exec_command( const char isglobal )
                 { set_error_msg( "Cannot nest global commands" ); return ERR; }
               n = ( c == 'g' || c == 'G' );	/* mark matching lines */
               if( !check_addr_range( 1, last_addr(), addr_cnt ) ||
-                  !build_active_list( &ibufp, first_addr, second_addr, n ) )
+                  !build_active_list( ibufpp, first_addr, second_addr, n ) )
                 return ERR;
-              n = ( c == 'G' || c == 'V' );	/* interact */
-              if( ( n && !get_command_suffix( &gflags ) ) ||
-                  !exec_global( ibufp, gflags, n ) )
-                return ERR;
+              n = ( c == 'G' || c == 'V' );		/* interactive */
+              if( n && !get_command_suffix( ibufpp, &pflags ) ) return ERR;
+              n = exec_global( ibufpp, pflags, n ); if( n != 0 ) return n;
               break;
     case 'h':
     case 'H': if( unexpected_address( addr_cnt ) ||
-                  !get_command_suffix( &gflags ) ) return ERR;
+                  !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( c == 'H' ) verbose = !verbose;
               if( ( c == 'h' || verbose ) && errmsg[0] )
-                fprintf( stderr, "%s\n", errmsg );
+                printf( "%s\n", errmsg );
               break;
-    case 'i': if( second_addr == 0 ) second_addr = 1;
-              if( !get_command_suffix( &gflags ) ) return ERR;
+    case 'i': if( !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
-              if( !append_lines( ibufp, second_addr - 1, isglobal ) ) return ERR;
-              ibufp = "";
+              if( !append_lines( ibufpp, second_addr, true, isglobal ) )
+                return ERR;
               break;
-    case 'j': if( !check_addr_range( -1, current_addr() + 1, addr_cnt ) ||
-                  !get_command_suffix( &gflags ) ) return ERR;
+    case 'j': if( !check_addr_range( current_addr(), current_addr() + 1, addr_cnt ) ||
+                  !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
-              if( first_addr != second_addr &&
+              if( first_addr < second_addr &&
                   !join_lines( first_addr, second_addr, isglobal ) ) return ERR;
               break;
-    case 'k': n = *ibufp++;
+    case 'k': n = *(*ibufpp)++;
               if( second_addr == 0 ) { invalid_address(); return ERR; }
-              if( !get_command_suffix( &gflags ) ||
+              if( !get_command_suffix( ibufpp, &pflags ) ||
                   !mark_line_node( search_line_node( second_addr ), n ) )
                 return ERR;
               break;
-    case 'l':
-    case 'n':
-    case 'p': if( c == 'l' ) n = GLS; else if( c == 'n' ) n = GNP; else n = GPR;
-              if( !check_addr_range( -1, -1, addr_cnt ) ||
-                  !get_command_suffix( &gflags ) ||
-                  !display_lines( first_addr, second_addr, gflags | n ) )
+    case 'l': n = pf_l; goto pflabel;
+    case 'n': n = pf_n; goto pflabel;
+    case 'p': n = pf_p;
+pflabel:      if( !check_addr_range2( addr_cnt ) ||
+                  !get_command_suffix( ibufpp, &pflags ) ||
+                  !print_lines( first_addr, second_addr, pflags | n ) )
                 return ERR;
-              gflags = 0;
+              pflags = 0;
               break;
-    case 'm': if( !check_addr_range( -1, -1, addr_cnt ) ||
-                  !get_third_addr( &addr ) ) return ERR;
+    case 'm': if( !check_addr_range2( addr_cnt ) ||
+                  !get_third_addr( ibufpp, &addr ) ) return ERR;
               if( addr >= first_addr && addr < second_addr )
                 { set_error_msg( "Invalid destination" ); return ERR; }
-              if( !get_command_suffix( &gflags ) ) return ERR;
+              if( !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
               if( !move_lines( first_addr, second_addr, addr, isglobal ) )
                 return ERR;
@@ -506,239 +602,210 @@ static int exec_command( const char isglobal )
     case 'P':
     case 'q':
     case 'Q': if( unexpected_address( addr_cnt ) ||
-                  !get_command_suffix( &gflags ) ) return ERR;
+                  !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( c == 'P' ) prompt_on = !prompt_on;
-              else return ( ( modified() && !scripted() && c == 'q' ) ? EMOD : -1 );
+              else if( c == 'q' && modified() && prev_status != EMOD )
+                return EMOD;
+              else return QUIT;
               break;
-    case 'r': if( unexpected_command_suffix( *ibufp ) ) return ERR;
+    case 'r': if( unexpected_command_suffix( **ibufpp ) ) return ERR;
               if( addr_cnt == 0 ) second_addr = last_addr();
-              fnp = get_filename();
-              if( !fnp || !get_command_suffix( &gflags ) ) return ERR;
+              fnp = get_filename( ibufpp, false );
+              if( !fnp ) return ERR;
+              if( !def_filename[0] && fnp[0] != '!' && !set_def_filename( fnp ) )
+                return ERR;
               if( !isglobal ) clear_undo_stack();
-              if( !def_filename[0] && fnp[0] != '!' ) set_def_filename( fnp );
-              if( traditional() && !fnp[0] && !def_filename[0] )
-                { set_error_msg( "No current filename" ); return ERR; }
               addr = read_file( fnp[0] ? fnp : def_filename, second_addr );
               if( addr < 0 ) return ERR;
-              if( addr && addr != last_addr() ) set_modified( 1 );
+              if( addr ) set_modified( true );
               break;
-    case 's': if( !command_s( &gflags, addr_cnt, isglobal ) ) return ERR;
+    case 's': if( !command_s( ibufpp, &pflags, addr_cnt, isglobal ) )
+                return ERR;
               break;
-    case 't': if( !check_addr_range( -1, -1, addr_cnt ) ||
-                  !get_third_addr( &addr ) ||
-                  !get_command_suffix( &gflags ) ) return ERR;
+    case 't': if( !check_addr_range2( addr_cnt ) ||
+                  !get_third_addr( ibufpp, &addr ) ||
+                  !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
               if( !copy_lines( first_addr, second_addr, addr ) ) return ERR;
               break;
     case 'u': if( unexpected_address( addr_cnt ) ||
-                  !get_command_suffix( &gflags ) ||
+                  !get_command_suffix( ibufpp, &pflags ) ||
                   !undo( isglobal ) ) return ERR;
               break;
     case 'w':
-    case 'W': n = *ibufp;
-              if( n == 'q' || n == 'Q' ) ++ibufp;
-              if( unexpected_command_suffix( *ibufp ) ) return ERR;
-              fnp = get_filename();
+    case 'W': n = **ibufpp;
+              if( n == 'q' || n == 'Q' ) ++*ibufpp;
+              if( unexpected_command_suffix( **ibufpp ) ) return ERR;
+              fnp = get_filename( ibufpp, false );
               if( !fnp ) return ERR;
-              if( addr_cnt == 0 && !last_addr() ) first_addr = second_addr = 0;
-              else if( !check_addr_range( 1, last_addr(), addr_cnt ) ) return ERR;
-              if( !get_command_suffix( &gflags ) ) return ERR;
-              if( !def_filename[0] && fnp[0] != '!' ) set_def_filename( fnp );
-              if( traditional() && !fnp[0] && !def_filename[0] )
-                { set_error_msg( "No current filename" ); return ERR; }
+              if( addr_cnt == 0 && last_addr() == 0 )
+                first_addr = second_addr = 0;
+              else if( !check_addr_range( 1, last_addr(), addr_cnt ) )
+                return ERR;
+              if( !def_filename[0] && fnp[0] != '!' && !set_def_filename( fnp ) )
+                return ERR;
               addr = write_file( fnp[0] ? fnp : def_filename,
                      ( c == 'W' ) ? "a" : "w", first_addr, second_addr );
               if( addr < 0 ) return ERR;
-              if( addr == last_addr() ) set_modified( 0 );
-              else if( modified() && !scripted() && n == 'q' ) return EMOD;
-              if( n == 'q' || n == 'Q' ) return -1;
+              if( addr == last_addr() && fnp[0] != '!' ) set_modified( false );
+              else if( n == 'q' && modified() && prev_status != EMOD )
+                return EMOD;
+              if( n == 'q' || n == 'Q' ) return QUIT;
               break;
-    case 'x': if( second_addr < 0 || last_addr() < second_addr )
+    case 'x': if( second_addr < 0 || second_addr > last_addr() )
                 { invalid_address(); return ERR; }
-              if( !get_command_suffix( &gflags ) ) return ERR;
+              if( !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
               if( !put_lines( second_addr ) ) return ERR;
               break;
-    case 'y': if( !check_addr_range( -1, -1, addr_cnt ) ||
-                  !get_command_suffix( &gflags ) ||
+    case 'y': if( !check_addr_range2( addr_cnt ) ||
+                  !get_command_suffix( ibufpp, &pflags ) ||
                   !yank_lines( first_addr, second_addr ) ) return ERR;
               break;
-    case 'z': first_addr = 1;
-              if( !check_addr_range( first_addr, current_addr() +
-                                     ( traditional() || !isglobal ), addr_cnt ) )
+    case 'z': if( !check_second_addr( current_addr() + !isglobal, addr_cnt ) )
                 return ERR;
-              if( *ibufp > '0' && *ibufp <= '9' )
-                { if( parse_int( &n, ibufp, &ibufp ) ) set_window_lines( n );
+              if( **ibufpp > '0' && **ibufpp <= '9' )
+                { if( parse_int( &n, *ibufpp, ibufpp ) ) set_window_lines( n );
                   else return ERR; }
-              if( !get_command_suffix( &gflags ) ||
-                  !display_lines( second_addr, min( last_addr(), second_addr + window_lines() ),
-                                  gflags ) )
-                return ERR;
-              gflags = 0;
+              if( !get_command_suffix( ibufpp, &pflags ) ||
+                  !print_lines( second_addr,
+                    min( last_addr(), second_addr + window_lines() - 1 ),
+                    pflags ) ) return ERR;
+              pflags = 0;
               break;
-    case '=': if( !get_command_suffix( &gflags ) ) return ERR;
+    case '=': if( !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               printf( "%d\n", addr_cnt ? second_addr : last_addr() );
               break;
     case '!': if( unexpected_address( addr_cnt ) ) return ERR;
-              n = get_shell_command();
-              if( n < 0 || !get_command_suffix( &gflags ) ) return ERR;
-              if( n ) printf( "%s\n", shcmd + 1 );
-              system( shcmd + 1 );
-              if( !scripted() ) printf( "!\n" );
+              fnp = get_shell_command( ibufpp );
+              if( !fnp ) return ERR;
+              if( system( fnp + 1 ) < 0 )
+                { set_error_msg( "Can't create shell process" ); return ERR; }
+              if( !scripted() ) fputs( "!\n", stdout );
               break;
-    case '\n': first_addr = 1;
-              if( !check_addr_range( first_addr, current_addr() +
-                                     ( traditional() || !isglobal ), addr_cnt ) ||
-                  !display_lines( second_addr, second_addr, 0 ) )
-                return ERR;
+    case '\n': if( !check_second_addr( current_addr() +
+                     ( traditional() || !isglobal ), addr_cnt ) ||
+                   !print_lines( second_addr, second_addr, 0 ) ) return ERR;
               break;
-    case '#': while( *ibufp++ != '\n' ) ;
+    case '#': while( *(*ibufpp)++ != '\n' ) {}
               break;
-    default:  set_error_msg( "Unknown command" ); return ERR;
+    default : set_error_msg( "Unknown command" ); return ERR;
     }
-  if( gflags && !display_lines( current_addr(), current_addr(), gflags ) )
+  if( pflags && !print_lines( current_addr(), current_addr(), pflags ) )
     return ERR;
   return 0;
   }
 
 
-/* apply command list in the command buffer to the active lines in a
-   range; return false if error */
-static char exec_global( const char *ibufp2, int gflags, const char interact )
+/* Apply command list in the command buffer to the active lines in a range.
+   Stop at first error. Return status of last command executed. */
+static int exec_global( const char ** const ibufpp, const int pflags,
+                        const bool interactive )
   {
-  static char *buf = 0;
+  static char * buf = 0;
   static int bufsz = 0;
-  const line_t *lp = 0;
-  const char *cmd = 0;
+  const char * cmd = 0;
 
-  if( !interact )
+  if( !interactive )
     {
-    if( traditional() && !strcmp( ibufp2, "\n" ) )
-      cmd = "p\n";		/* null cmd-list == `p' */
-    else if( !( cmd = get_extended_line( ibufp2, 0, 0 ) ) )
-      return 0;
+    if( traditional() && strcmp( *ibufpp, "\n" ) == 0 )
+      cmd = "p\n";			/* null cmd_list == 'p' */
+    else
+      {
+      if( !get_extended_line( ibufpp, 0, false ) ) return ERR;
+      cmd = *ibufpp;
+      }
     }
   clear_undo_stack();
-  while( ( lp = next_active_node() ) )
+  while( true )
     {
+    const line_t * const lp = next_active_node();
+    if( !lp ) break;
     set_current_addr( get_line_node_addr( lp ) );
-    if( current_addr() < 0 ) return 0;
-    if( interact )
+    if( current_addr() < 0 ) return ERR;
+    if( interactive )
       {
       /* print current_addr; get a command in global syntax */
-      int len;
-      if( !display_lines( current_addr(), current_addr(), gflags ) )
-        return 0;
-      do { ibufp2 = get_tty_line( &len ); }
-      while( ibufp2 && len > 0 && ibufp2[len-1] != '\n' );
-      if( !ibufp2 ) return 0;
-      if( len == 0 ) { set_error_msg( "Unexpected end-of-file" ); return 0; }
-      if( len == 1 && !strcmp( ibufp2, "\n" ) ) continue;
-      if( len == 2 && !strcmp( ibufp2, "&\n" ) )
-        { if( !cmd ) { set_error_msg( "No previous command" ); return 0; } }
-      else if( !( cmd = get_extended_line( ibufp2, &len, 0 ) ) ) return 0;
+      int len = 0;
+      if( !print_lines( current_addr(), current_addr(), pflags ) ) return ERR;
+      *ibufpp = get_stdin_line( &len );
+      if( !*ibufpp ) return ERR;			/* error */
+      if( len <= 0 ) return ERR;			/* EOF */
+      if( len == 1 && strcmp( *ibufpp, "\n" ) == 0 ) continue;
+      if( len == 2 && strcmp( *ibufpp, "&\n" ) == 0 )
+        { if( !cmd ) { set_error_msg( no_prev_com ); return ERR; } }
       else
         {
-        if( !resize_buffer( &buf, &bufsz, len + 1 ) ) return 0;
-        memcpy( buf, cmd, len + 1 );
+        if( !get_extended_line( ibufpp, &len, false ) ||
+            !resize_buffer( &buf, &bufsz, len + 1 ) ) return ERR;
+        memcpy( buf, *ibufpp, len + 1 );
         cmd = buf;
         }
       }
-    ibufp = cmd;
-    while( *ibufp ) if( exec_command( 1 ) < 0 ) return 0;
+    *ibufpp = cmd;
+    while( **ibufpp )
+      {
+      const int status = exec_command( ibufpp, 0, true );
+      if( status != 0 ) return status;
+      }
     }
-  return 1;
+  return 0;
   }
 
 
-int ed_loop( const char loose )
+static void script_error( void )
+  {
+  if( verbose ) fprintf( stderr, "script, line %d: %s\n", linenum(), errmsg );
+  }
+
+
+int main_loop( const bool initial_error, const bool loose )
   {
   extern jmp_buf jmp_state;
-  volatile int err_status = 0;			/* program exit status */
-  volatile int linenum = 0;			/* script line number */
-  int len, status, old_status;
+  const char * ibufp;			/* pointer to command buffer */
+  volatile int err_status = 0;		/* program exit status */
+  int len = 0, status;
 
   disable_interrupts();
   set_signals();
   status = setjmp( jmp_state );
-  if( !status ) enable_interrupts();
-  else { status = -1; fputs( "\n?\n", stderr ); set_error_msg( "Interrupt" ); }
-  while( 1 )
-    {
+  if( status == 0 )			/* direct invocation of setjmp */
+    { enable_interrupts(); if( initial_error ) { status = -1; err_status = 1; } }
+  else { status = -1; fputs( "\n?\n", stdout ); set_error_msg( "Interrupt" ); }
 
+  while( true )
+    {
+    
     if (mode == 'v') ved_loop();
     
-    if( status < 0 && verbose ) fprintf( stderr, "%s\n", errmsg );
-    if( prompt_on ) { /*printf( "%s", prompt_str ); fflush( stdout );*/ }
-
-
-    //print_info_message("ed loop");
-    ibufp = command_prompt(":%s", &len); //print_info_message(ibufp);
+    fflush( stdout ); fflush( stderr );
+    if( status < 0 && verbose ) { printf( "%s\n", errmsg ); fflush( stdout ); }
+    if( prompt_on ) { fputs( prompt_str, stdout ); fflush( stdout ); }
     
+    
+    ibufp = command_prompt(":%s", &len);
     if (mode == 'v') continue;
-    if (!ibufp) return err_status;
-    if( !len )
-      {
-      if( !modified() || scripted() ) return err_status;
-      fputs( "?\n", stderr ); set_error_msg( "Warning: file modified" );
-      
-      if( is_regular_file( 0 ) )
-        {
-        if( verbose ) fprintf( stderr, "script, line %d: %s\n", linenum, errmsg );
-        return 2;
-        }
-      set_modified( 0 ); status = EMOD; continue;
-      }
-    else if( ibufp[len-1] != '\n' )	/* discard line */
-      { set_error_msg( "Unexpected end-of-file" ); status = ERR; continue; }
-    else ++linenum;
-        
-    old_status = status;
-    status = exec_command( 0 );
     
-    //print_info_message("executed, status: %d", status); read_key();
-
+    
+    if( !ibufp ) return 2;			/* an error happened */
+    if( len <= 0 )				/* EOF on stdin ('q') */
+      {
+      if( !modified() || status == EMOD ) status = QUIT;
+      else { status = EMOD; if( !loose ) err_status = 2; }
+      }
+    else status = exec_command( &ibufp, status, false );
     if( status == 0 ) continue;
-    if( status == -1 ) return err_status;
-    if( status == EMOD )
-      {
-      if( old_status == EMOD ) return err_status;
-      fputs( "?\n", stderr );				/* give warning */
-      set_error_msg( "Warning: file modified" );
-      print_info_message("Warning: file modified"); mode = 'v';
-      if( is_regular_file( 0 ) )
-        {
-        if( verbose ) fprintf( stderr, "script, line %d: %s\n", linenum, errmsg );
-        return 1;
-        }
-      }
-    else if( status == FATAL )
-      {
-      if( verbose )
-        {
-        if( is_regular_file( 0 ) )
-          fprintf( stderr, "script, line %d: %s\n", linenum, errmsg );
-        else fprintf( stderr, "%s\n", errmsg );
-        }
-      return 1;
-      }
-    else
-      {
-      fputs( "?\n", stderr );			/* give warning */
-      if( is_regular_file( 0 ) )
-        {
-        if( verbose ) fprintf( stderr, "script, line %d: %s\n", linenum, errmsg );
-        return 1;
-        }
-      }
-    if( !loose ) err_status = 1;
+    if( status == QUIT ) return err_status;
+    fputs( "?\n", stdout );			/* give warning */
+    if( !loose && err_status == 0 ) err_status = 1;
+    if( status == EMOD ) {
+      set_error_msg( "Warning: buffer modified" );
+      print_info_message("Warning: buffer modified");
+      mode = 'v';
     }
-  }
-
-
-void set_error_msg( const char *msg )
-  {
-  if( !msg ) msg = "";
-  strncpy( errmsg, msg, sizeof( errmsg ) );
-  errmsg[sizeof(errmsg)-1] = 0;
+    if( is_regular_file( 0 ) )
+      { script_error(); return ( ( status == FATAL ) ? 1 : err_status ); }
+    if( status == FATAL )
+      { if( verbose ) { printf( "%s\n", errmsg ); } return 1; }
+    }
   }

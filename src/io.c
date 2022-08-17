@@ -1,20 +1,20 @@
 /* io.c: i/o routines for the ed line editor */
-/*  GNU ed - The GNU line editor.
-    Copyright (C) 1993, 1994 Andrew Moore, Talke Studio
-    Copyright (C) 2006, 2007, 2008, 2009 Antonio Diaz Diaz.
+/* GNU ed - The GNU line editor.
+   Copyright (C) 1993, 1994 Andrew Moore, Talke Studio
+   Copyright (C) 2006-2022 Antonio Diaz Diaz.
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 2 of the License, or
+   (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #include <errno.h>
@@ -27,27 +27,44 @@
 #include "ed.h"
 
 
+static const line_t * unterminated_line = 0;	/* last line has no '\n' */
+static int linenum_ = 0;			/* script line number */
+
+int linenum( void ) { return linenum_; }
+
+void reset_unterminated_line( void ) { unterminated_line = 0; }
+
+void unmark_unterminated_line( const line_t * const lp )
+  { if( unterminated_line == lp ) unterminated_line = 0; }
+
+static bool unterminated_last_line( void )
+  { return ( unterminated_line != 0 &&
+             unterminated_line == search_line_node( last_addr() ) ); }
+
+
 /* print text to stdout */
-static char put_tty_line( const char *s, int len, const int gflags )
+static void print_line( const char * p, int len, const int pflags )
   {
-  const char escapes[] = "\a\b\f\n\r\t\v\\";
-  const char escchars[] = "abfnrtv\\";
+  const char escapes[] = "\a\b\f\n\r\t\v";
+  const char escchars[] = "abfnrtv";
   int col = 0;
 
-  if( gflags & GNP ) { printf( "%d\t", current_addr() ); col = 8; }
+  if( pflags & pf_n ) { printf( "%d\t", current_addr() ); col = 8; }
   while( --len >= 0 )
     {
-    const unsigned char ch = *s++;
-    if( !( gflags & GLS ) ) putchar( ch );
+    const unsigned char ch = *p++;
+    if( !( pflags & pf_l ) ) putchar( ch );
     else
       {
       if( ++col > window_columns() ) { col = 1; fputs( "\\\n", stdout ); }
-      if( ch >= 32 && ch <= 126 && ch != '\\' ) putchar( ch );
+      if( ch >= 32 && ch <= 126 )
+        { if( ch == '$' || ch == '\\' ) { ++col; putchar('\\'); }
+          putchar( ch ); }
       else
         {
-        char *cp = strchr( escapes, ch );
+        char * const p = strchr( escapes, ch );
         ++col; putchar('\\');
-        if( cp ) putchar( escchars[cp-escapes] );
+        if( ch && p ) putchar( escchars[p-escapes] );
         else
           {
           col += 2;
@@ -58,227 +75,263 @@ static char put_tty_line( const char *s, int len, const int gflags )
         }
       }
     }
-  if( !traditional() && ( gflags & GLS ) ) putchar('$');
+  if( !traditional() && ( pflags & pf_l ) ) putchar('$');
   putchar('\n');
-  return 1;
   }
 
 
 /* print a range of lines to stdout */
-char display_lines( int from, const int to, const int gflags )
+bool print_lines( int from, const int to, const int pflags )
   {
-  line_t *ep = search_line_node( inc_addr( to ) );
-  line_t *bp = search_line_node( from );
+  line_t * const ep = search_line_node( inc_addr( to ) );
+  line_t * bp = search_line_node( from );
 
-  if( !from ) { set_error_msg( "Invalid address" ); return 0; }
+  if( !from ) { invalid_address(); return false; }
   while( bp != ep )
     {
-    char *s = get_sbuf_line( bp );
-    if( !s ) return 0;
+    const char * const s = get_sbuf_line( bp );
+    if( !s ) return false;
     set_current_addr( from++ );
-    if( !put_tty_line( s, bp->len, gflags ) ) return 0;
+    print_line( s, bp->len, pflags );
     bp = bp->q_forw;
     }
-  return 1;
+  return true;
   }
 
 
 /* return the parity of escapes at the end of a string */
-static char trailing_escape( const char * const s, int len )
+static bool trailing_escape( const char * const s, int len )
   {
-  char parity = 0;
-  while( --len >= 0 && s[len] == '\\' ) parity = !parity;
-  return parity;
+  bool odd_escape = false;
+  while( --len >= 0 && s[len] == '\\' ) odd_escape = !odd_escape;
+  return odd_escape;
   }
 
 
-/* get an extended line from stdin */
-const char *get_extended_line( const char *ibufp, int *lenp, const char nonl )
+/* If *ibufpp contains an escaped newline, get an extended line (one
+   with escaped newlines) from stdin.
+   The backslashes escaping the newlines are stripped.
+   Return line length in *lenp, including the trailing newline. */
+bool get_extended_line( const char ** const ibufpp, int * const lenp,
+                        const bool strip_escaped_newlines )
   {
-  static char *buf = 0;
+  static char * buf = 0;
   static int bufsz = 0;
   int len;
 
-  for( len = 0; ibufp[len++] != '\n'; ) ;
-  if( len < 2 || !trailing_escape( ibufp, len - 1 ) )
-    { if( lenp ) *lenp = len; return ibufp; }
-  if( !resize_buffer( &buf, &bufsz, len ) ) return 0;
-  memcpy( buf, ibufp, len );
-  --len; buf[len-1] = '\n';		/* strip trailing esc */
-  if( nonl ) --len;			/* strip newline */
-  while( 1 )
+  for( len = 0; (*ibufpp)[len++] != '\n'; ) ;
+  if( len < 2 || !trailing_escape( *ibufpp, len - 1 ) )
+    { if( lenp ) *lenp = len; return true; }
+  if( !resize_buffer( &buf, &bufsz, len + 1 ) ) return false;
+  memcpy( buf, *ibufpp, len );
+  --len; buf[len-1] = '\n';			/* strip trailing esc */
+  if( strip_escaped_newlines ) --len;		/* strip newline */
+  while( true )
     {
     int len2;
-    if( !( ibufp = get_tty_line( &len2 ) ) ) return 0;
-    if( len2 == 0 || ibufp[len2-1] != '\n' )
-      { set_error_msg( "Unexpected end-of-file" ); return 0; }
-    if( !resize_buffer( &buf, &bufsz, len + len2 ) ) return 0;
-    memcpy( buf + len, ibufp, len2 );
+    const char * const s = get_stdin_line( &len2 );
+    if( !s ) return false;			/* error */
+    if( len2 <= 0 ) return false;		/* EOF */
+    if( !resize_buffer( &buf, &bufsz, len + len2 + 1 ) ) return false;
+    memcpy( buf + len, s, len2 );
     len += len2;
     if( len2 < 2 || !trailing_escape( buf, len - 1 ) ) break;
-    --len; buf[len-1] = '\n';		/* strip trailing esc */
-    if( nonl ) --len;			/* strip newline */
+    --len; buf[len-1] = '\n';			/* strip trailing esc */
+    if( strip_escaped_newlines ) --len;		/* strip newline */
     }
-  if( !resize_buffer( &buf, &bufsz, len + 1 ) ) return 0;
   buf[len] = 0;
+  *ibufpp = buf;
   if( lenp ) *lenp = len;
-  return buf;
+  return true;
   }
 
 
-/* read a line of text from stdin; return pointer to buffer and line length */
-const char *get_tty_line( int *lenp )
+/* Read a line of text from stdin.
+   Incomplete lines (lacking the trailing newline) are discarded.
+   Return pointer to buffer and line size (including trailing newline),
+   or 0 if error, or *sizep = 0 if EOF.
+*/
+const char * get_stdin_line( int * const sizep )
   {
-  static char *buf = 0;
+  static char * buf = 0;
   static int bufsz = 0;
-  int i = 0, oi = -1;
+  int i = 0;
 
-  while( 1 )
+  while( true )
     {
-    const int c = read_key(1);
+    const int c = getchar();
+    if( !resize_buffer( &buf, &bufsz, i + 2 ) ) { *sizep = 0; return 0; }
     if( c == EOF )
       {
       if( ferror( stdin ) )
         {
-        show_strerror( "stdin", errno ); set_error_msg( "Cannot read stdin" );
-        clearerr( stdin ); if( lenp ) *lenp = 0;
-        return 0;
+        show_strerror( "stdin", errno );
+        set_error_msg( "Cannot read stdin" );
+        clearerr( stdin );
+        *sizep = 0; return 0;
         }
-      else
+      if( feof( stdin ) )
         {
-        clearerr( stdin ); if( i != oi ) { oi = i; continue; }
-        if( i ) buf[i] = 0; if( lenp ) *lenp = i;
+        set_error_msg( "Unexpected end-of-file" );
+        clearerr( stdin );
+        buf[0] = 0; *sizep = 0; if( i > 0 ) ++linenum_;	/* discard line */
         return buf;
         }
       }
     else
       {
-      if( !resize_buffer( &buf, &bufsz, i + 2 ) )
-        { if( lenp ) *lenp = 0; return 0; }
       buf[i++] = c; if( !c ) set_binary(); if( c != '\n' ) continue;
-      buf[i] = 0; if( lenp ) *lenp = i;
+      ++linenum_; buf[i] = 0; *sizep = i;
       return buf;
       }
     }
   }
 
 
-/* read a line of text from a stream */
-static const char * read_stream_line( FILE *fp, int *lenp, char *newline_added_now )
+/* Read a line of text from a stream.
+   Return pointer to buffer and line size (including trailing newline
+   if it exists and is not added now).
+*/
+static const char * read_stream_line( const char * const filename,
+                                      FILE * const fp, int * const sizep,
+                                      bool * const newline_addedp )
   {
-  static char *buf = 0;
+  static char * buf = 0;
   static int bufsz = 0;
   int c, i = 0;
 
-  while( 1 )
+  while( true )
     {
     if( !resize_buffer( &buf, &bufsz, i + 2 ) ) return 0;
     c = getc( fp ); if( c == EOF ) break;
     buf[i++] = c;
-    if( !c ) set_binary(); else if( c == '\n' ) break;
+    if( !c ) set_binary();
+    else if( c == '\n' )		/* remove CR only from CR/LF pairs */
+      { if( strip_cr() && i > 1 && buf[i-2] == '\r' ) { buf[i-2] = '\n'; --i; }
+        break; }
     }
   buf[i] = 0;
   if( c == EOF )
     {
     if( ferror( fp ) )
       {
-      show_strerror( 0, errno );
+      show_strerror( filename, errno );
       set_error_msg( "Cannot read input file" );
       return 0;
       }
     else if( i )
       {
-      buf[i] = '\n'; buf[i+1] = 0; *newline_added_now = 1;
+      buf[i] = '\n'; buf[i+1] = 0; *newline_addedp = true;
       if( !isbinary() ) ++i;
       }
     }
-  *lenp = i;
+  *sizep = i;
   return buf;
   }
 
 
-/* read a stream into the editor buffer; return size of data read */
-static long read_stream( FILE *fp, const int addr )
+/* read a stream into the editor buffer;
+   return total size of data read, or -1 if error */
+static long read_stream( const char * const filename, FILE * const fp,
+                         const int addr )
   {
-  line_t *lp = search_line_node( addr );
-  undo_t *up = 0;
-  long size = 0;
-  const char o_isbinary = isbinary();
-  const char appended = ( addr == last_addr() );
-  char newline_added_now = 0;
+  line_t * lp = search_line_node( addr );
+  undo_t * up = 0;
+  long total_size = 0;
+  const bool o_isbinary = isbinary();
+  const bool appended = ( addr == last_addr() );
+  const bool o_unterminated_last_line = unterminated_last_line();
+  bool newline_added = false;
 
   set_current_addr( addr );
-  while( 1 )
+  while( true )
     {
-    int len = 0;
-    const char *buf = read_stream_line( fp, &len, &newline_added_now );
-    if( !buf ) return -1;
-    if( len > 0 ) size += len; else break;
+    int size = 0;
+    const char * const s =
+      read_stream_line( filename, fp, &size, &newline_added );
+    if( !s ) return -1;
+    if( size <= 0 ) break;
+    total_size += size;
     disable_interrupts();
-    if( !put_sbuf_line( buf, current_addr() ) )
+    if( !put_sbuf_line( s, size + newline_added ) )
       { enable_interrupts(); return -1; }
     lp = lp->q_forw;
     if( up ) up->tail = lp;
-    else if( !( up = push_undo_atom( UADD, -1, -1 ) ) )
-      { enable_interrupts(); return -1; }
+    else
+      {
+      up = push_undo_atom( UADD, current_addr(), current_addr() );
+      if( !up ) { enable_interrupts(); return -1; }
+      }
     enable_interrupts();
     }
-  if( addr && appended && size && o_isbinary && newline_added() )
-    fputs( "Newline inserted\n", stderr );
-  else if( newline_added_now && appended )
-    fputs( "Newline appended\n", stderr );
-  if( isbinary() && !o_isbinary && newline_added_now && !appended ) ++size;
-  if( !size ) newline_added_now = 1;
-  if( appended && newline_added_now ) set_newline_added();
-  return size;
+  if( addr && appended && total_size && o_unterminated_last_line )
+    fputs( "Newline inserted\n", stdout );		/* before stream */
+  else if( newline_added && ( !appended || !isbinary() ) )
+    fputs( "Newline appended\n", stdout );		/* after stream */
+  if( !appended && isbinary() && !o_isbinary && newline_added )
+    ++total_size;
+  if( appended && isbinary() && ( newline_added || total_size == 0 ) )
+    unterminated_line = search_line_node( last_addr() );
+  return total_size;
   }
 
 
-/* read a named file/pipe into the buffer; return line count */
-int read_file( const char *filename, const int addr )
+/* Read a named file/pipe into the buffer.
+   Return line count, -1 if file not found, -2 if fatal error.
+*/
+int read_file( const char * const filename, const int addr )
   {
-  FILE *fp;
+  FILE * fp;
   long size;
+  int ret;
 
   if( *filename == '!' ) fp = popen( filename + 1, "r" );
-  else fp = fopen( strip_escapes( filename ), "r" );
+  else
+    {
+    const char * const stripped_name = strip_escapes( filename );
+    if( !stripped_name ) return -2;
+    fp = fopen( stripped_name, "r" );
+    }
   if( !fp )
     {
     show_strerror( filename, errno );
     set_error_msg( "Cannot open input file" );
     return -1;
     }
-  if( ( size = read_stream( fp, addr ) ) < 0 ) return -1;
-  if( ( (*filename == '!' ) ? pclose( fp ) : fclose( fp ) ) < 0 )
+  size = read_stream( filename, fp, addr );
+  if( *filename == '!' ) ret = pclose( fp ); else ret = fclose( fp );
+  if( size < 0 ) return -2;
+  if( ret != 0 )
     {
     show_strerror( filename, errno );
     set_error_msg( "Cannot close input file" );
-    return -1;
+    return -2;
     }
-  if( !scripted() ) fprintf( stderr, "%lu\n", size );
+  if( !scripted() ) printf( "%lu\n", size );
   return current_addr() - addr;
   }
 
 
 /* write a range of lines to a stream */
-static long write_stream( FILE *fp, int from, const int to )
+static long write_stream( const char * const filename, FILE * const fp,
+                          int from, const int to )
   {
-  line_t *lp = search_line_node( from );
+  line_t * lp = search_line_node( from );
   long size = 0;
 
   while( from && from <= to )
     {
     int len;
-    char *s = get_sbuf_line( lp );
-    if( !s ) return -1;
+    char * p = get_sbuf_line( lp );
+    if( !p ) return -1;
     len = lp->len;
-    if( from != last_addr() || !isbinary() || !newline_added() )
-      s[len++] = '\n';
+    if( from != last_addr() || !isbinary() || !unterminated_last_line() )
+      p[len++] = '\n';
     size += len;
     while( --len >= 0 )
-      if( fputc( *s++, fp ) < 0 )
+      if( fputc( *p++, fp ) == EOF )
         {
-        show_strerror( 0, errno );
+        show_strerror( filename, errno );
         set_error_msg( "Cannot write file" );
         return -1;
         }
@@ -292,28 +345,36 @@ static long write_stream( FILE *fp, int from, const int to )
 int write_file( const char * const filename, const char * const mode,
                 const int from, const int to )
   {
-  FILE *fp;
+  FILE * fp;
   long size;
+  int ret;
 
   if( *filename == '!' ) fp = popen( filename + 1, "w" );
-  else fp = fopen( strip_escapes( filename ), mode );
+  else
+    {
+    const char * const stripped_name = strip_escapes( filename );
+    if( !stripped_name ) return -1;
+    fp = fopen( stripped_name, mode );
+    }
   if( !fp )
     {
     show_strerror( filename, errno );
     set_error_msg( "Cannot open output file" );
     return -1;
     }
-  if( ( size = write_stream( fp, from, to ) ) < 0 ) return -1;
-  if( ( (*filename == '!' ) ? pclose( fp ) : fclose( fp ) ) < 0 )
+  size = write_stream( filename, fp, from, to );
+  if( *filename == '!' ) ret = pclose( fp ); else ret = fclose( fp );
+  if( size < 0 ) return -1;
+  if( ret != 0 )
     {
     show_strerror( filename, errno );
     set_error_msg( "Cannot close output file" );
     return -1;
     }
-  if( !scripted() ) fprintf( stderr, "%lu\n", size );
+  if( !scripted() ) printf( "%lu\n", size );
   return ( from && from <= to ) ? to - from + 1 : 0;
   }
-
+  
 /* read a single key from STDIN in raw mode*/
 int read_key(int ed) {
   int bytes;

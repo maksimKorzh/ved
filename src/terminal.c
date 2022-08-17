@@ -18,8 +18,8 @@ void die(const char *message) {
 
 /* clear terminal screen */
 void clear_screen() {
-  write(STDOUT_FILENO, CLEAR_SCREEN, 4);
-  write(STDOUT_FILENO, RESET_CURSOR, 3);
+  if (write(STDOUT_FILENO, CLEAR_SCREEN, 4)) {/* suppress warning */};
+  if (write(STDOUT_FILENO, RESET_CURSOR, 3)) {/* suppress warning */};
 }
 
 /* enable terminal raw mode */

@@ -1,12 +1,36 @@
-Changes in version 1.4:
+Changes in version 1.18:
 
-The undo command has been fixed to restore the modified status of the
-buffer being edited.
+The shell escape command (!) now flushes stdout so that the modified command
+is always printed before being executed even if standard output is fully
+buffered (for example, a file). (Reported by Sören Tempel).
 
-A race condition with user interrupt has been fixed in
-search_and_replace.
+A couple of harmless memory leaks have been fixed. (They both happened just
+before ed exits). (Reported by Xosé Vázquez Pérez).
 
-The functions resize_line_buffer and resize_undo_buffer have been added
-to definitively fix the aliasing warnings.
+The pointer returned by the function 'strip_escapes' is now checked. (It may
+be null if memory is exhausted).
 
-Some minor corrections have been made to the manual.
+The shell escape command (!) now removes the backslash from each escaped '%'
+character within the text of the shell command line.
+(Reported by Martin Thomsen).
+
+Case-insensitive regular expressions have been implemented as in GNU sed.
+
+Syntax errors in regular expressions, for example unmatched ( or \(, no
+longer overwrite a previously compiled regular expression, preventing a
+"No previous pattern" error.
+
+The option '--strip-trailing-cr', which removes carriage returns at end of
+text lines, has been added.
+
+Loading a file now fails if a line is longer than INT_MAX bytes or if the
+file contains more than INT_MAX lines (usually 2 Gi lines). (Instead of
+overflowing line addresses).
+
+In interactive mode ed now sets final exit status to 1 if a fatal error
+happens while reading the file passed in the command line.
+
+red now reports "Directory access restricted" instead of "Invalid filename"
+when trying to edit a file outside of the current directory.
+
+The new chapter "The 's' Command" has been added to the manual.

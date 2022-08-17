@@ -177,7 +177,7 @@ void update_screen() {
   snprintf(curpos, sizeof(curpos), SET_CURSOR, (cury - row_offset) + 1, (tabsx - col_offset) + 1);
   append_buffer(&buf, curpos, strlen(curpos));
   append_buffer(&buf, SHOW_CURSOR, 6);
-  write(STDOUT_FILENO, buf.string, buf.len);
+  if (write(STDOUT_FILENO, buf.string, buf.len)) {/* suppress warning */};
   clear_buffer(&buf);
 }
 
@@ -217,7 +217,7 @@ void move_cursor(int key) {
 }
 
 /* process keypress */
-void read_keyboard(int loose) {
+void read_keyboard() {
   int c = read_key();
   switch(c) {
     case ':': mode = 'e'; break;
@@ -239,11 +239,11 @@ void init_ved() {
 }
 
 /* visual editor loop */
-void ved_loop(int loose) {
+void ved_loop() {
   //return 0;
   while (1) {
     update_screen();
-    read_keyboard(loose);
+    read_keyboard();
     if (mode == 'e') return;
   }
 }

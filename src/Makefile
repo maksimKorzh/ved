@@ -1,53 +1,56 @@
 # Makefile for GNU ed - The GNU line editor
-# Copyright (C) 2006, 2007, 2008, 2009 Antonio Diaz Diaz.
-# This file was generated automatically by configure. Do not edit.
+# Copyright (C) 2006-2022 Antonio Diaz Diaz.
+# This file was generated automatically by configure. Don't edit.
 #
 # This Makefile is free software: you have unlimited permission
-# to copy, distribute and modify it.
+# to copy, distribute, and modify it.
 
-progname = ved
-progversion = 1.4
+pkgname = ed
+pkgversion = 1.18
+progname = ed
 VPATH = .
 prefix = /usr/local
 exec_prefix = $(prefix)
 bindir = $(exec_prefix)/bin
-datadir = $(prefix)/share
-infodir = $(datadir)/info
-mandir = $(datadir)/man
-sysconfdir = $(prefix)/etc
+datarootdir = $(prefix)/share
+infodir = $(datarootdir)/info
+mandir = $(datarootdir)/man
 program_prefix = 
 CC = gcc
-CXX = g++
 CPPFLAGS = 
-CFLAGS =
-CXXFLAGS =
+CFLAGS = -Wall -W -O2
 LDFLAGS = 
 
-DISTNAME = $(progname)-$(progversion)
+DISTNAME = $(pkgname)-$(pkgversion)
 INSTALL = install
-INSTALL_PROGRAM = $(INSTALL) -p -m 755
-INSTALL_DATA = $(INSTALL) -p -m 644
+INSTALL_PROGRAM = $(INSTALL) -m 755
+INSTALL_SCRIPT = $(INSTALL) -m 755
+INSTALL_DATA = $(INSTALL) -m 644
 INSTALL_DIR = $(INSTALL) -d -m 755
 SHELL = /bin/sh
+CAN_RUN_INSTALLINFO = $(SHELL) -c "install-info --version" > /dev/null 2>&1
 
-objs = buffer.o carg_parser.o global.o io.o \
-       main.o ed.o regex.o signal.o \
+objs = buffer.o carg_parser.o global.o io.o main.o ed.o regex.o signal.o \
        terminal.o ved.o
 
-.PHONY : all install install-info install-man install-strip \
-         uninstall uninstall-info uninstall-man \
+
+.PHONY : all install install-bin install-info install-man-base install-man \
+         install-strip install-compress install-strip-compress \
+         install-bin-strip install-info-compress install-man-compress \
+         uninstall uninstall-bin uninstall-info uninstall-man \
          doc info man check dist clean distclean
 
-all : $(progname)
+all : $(progname) v$(progname)
 
 $(progname) : $(objs)
-	$(CC) $(LDFLAGS) -o $(progname) $(objs)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(objs)
 
-$(progname)_profiled : $(objs)
-	$(CC) $(LDFLAGS) -pg -o $(progname)_profiled $(objs)
+v$(progname) : v$(progname).in
+	cat $(VPATH)/v$(progname).in > $@
+	chmod a+x $@
 
 main.o : main.c
-	$(CC) $(CPPFLAGS) $(CFLAGS) -DPROGVERSION=\"$(progversion)\" -c -o $@ $<
+	$(CC) $(CPPFLAGS) $(CFLAGS) -DPROGVERSION=\"$(pkgversion)\" -c -o $@ $<
 
 %.o : %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
@@ -57,54 +60,80 @@ carg_parser.o : carg_parser.h
 main.o        : carg_parser.h
 
 
-doc : info
+doc : info man
 
-info : $(VPATH)/doc/$(progname).info
+info : $(VPATH)/doc/$(pkgname).info
 
-$(VPATH)/doc/$(progname).info : $(VPATH)/doc/$(progname).texinfo
-	cd $(VPATH)/doc && makeinfo $(progname).texinfo
+$(VPATH)/doc/$(pkgname).info : $(VPATH)/doc/$(pkgname).texi
+	cd $(VPATH)/doc && makeinfo $(pkgname).texi
+
+man : $(VPATH)/doc/$(progname).1
+
+$(VPATH)/doc/$(progname).1 : $(progname)
+	help2man -n 'line-oriented text editor' -o $@ ./$(progname)
 
 Makefile : $(VPATH)/configure $(VPATH)/Makefile.in
 	./config.status
 
-check : all $(VPATH)/testsuite/check.sh
-	@$(VPATH)/testsuite/check.sh $(VPATH)/testsuite
+check : all
+	@$(VPATH)/testsuite/check.sh $(VPATH)/testsuite $(pkgversion)
 
-install : all install-info install-man
-	if test ! -d $(DESTDIR)$(bindir) ; then $(INSTALL_DIR) $(DESTDIR)$(bindir) ; fi
-	$(INSTALL_PROGRAM) ./$(progname) $(DESTDIR)$(bindir)/$(program_prefix)$(progname)
-	-rm -f $(DESTDIR)$(bindir)/$(program_prefix)r$(progname)
-	cd $(DESTDIR)$(bindir) && ln -s $(program_prefix)$(progname) $(program_prefix)r$(progname)
+install : install-bin install-info install-man
+install-strip : install-bin-strip install-info install-man
+install-compress : install-bin install-info-compress install-man-compress
+install-strip-compress : install-bin-strip install-info-compress install-man-compress
+
+install-bin : all
+	if [ ! -d "$(DESTDIR)$(bindir)" ] ; then $(INSTALL_DIR) "$(DESTDIR)$(bindir)" ; fi
+	$(INSTALL_PROGRAM) ./$(progname) "$(DESTDIR)$(bindir)/$(program_prefix)$(progname)"
+	$(INSTALL_SCRIPT) ./v$(progname) "$(DESTDIR)$(bindir)/$(program_prefix)v$(progname)"
+
+install-bin-strip : all
+	$(MAKE) INSTALL_PROGRAM='$(INSTALL_PROGRAM) -s' install-bin
 
 install-info :
-	if test ! -d $(DESTDIR)$(infodir) ; then $(INSTALL_DIR) $(DESTDIR)$(infodir) ; fi
-	$(INSTALL_DATA) $(VPATH)/doc/$(progname).info $(DESTDIR)$(infodir)/$(program_prefix)$(progname).info
-	-install-info --info-dir=$(DESTDIR)$(infodir) $(DESTDIR)$(infodir)/$(program_prefix)$(progname).info
+	if [ ! -d "$(DESTDIR)$(infodir)" ] ; then $(INSTALL_DIR) "$(DESTDIR)$(infodir)" ; fi
+	-rm -f "$(DESTDIR)$(infodir)/$(pkgname).info"*
+	$(INSTALL_DATA) $(VPATH)/doc/$(pkgname).info "$(DESTDIR)$(infodir)/$(program_prefix)$(pkgname).info"
+	-if $(CAN_RUN_INSTALLINFO) ; then \
+	  install-info --info-dir="$(DESTDIR)$(infodir)" "$(DESTDIR)$(infodir)/$(program_prefix)$(pkgname).info" ; \
+	fi
 
-install-man :
-	if test ! -d $(DESTDIR)$(mandir)/man1 ; then $(INSTALL_DIR) $(DESTDIR)$(mandir)/man1 ; fi
-	$(INSTALL_DATA) $(VPATH)/doc/$(progname).1 $(DESTDIR)$(mandir)/man1/$(program_prefix)$(progname).1
-	-rm -f $(DESTDIR)$(mandir)/man1/$(program_prefix)r$(progname).1
-	cd $(DESTDIR)$(mandir)/man1 && ln -s $(program_prefix)$(progname).1 $(program_prefix)r$(progname).1
+install-info-compress : install-info
+	lzip -v -9 "$(DESTDIR)$(infodir)/$(pkgname).info"
 
-install-strip : all
-	$(MAKE) INSTALL_PROGRAM='$(INSTALL_PROGRAM) -s' install
+install-man-base :
+	if [ ! -d "$(DESTDIR)$(mandir)/man1" ] ; then $(INSTALL_DIR) "$(DESTDIR)$(mandir)/man1" ; fi
+	-rm -f "$(DESTDIR)$(mandir)/man1/$(program_prefix)$(progname).1"*
+	-rm -f "$(DESTDIR)$(mandir)/man1/$(program_prefix)v$(progname).1"*
+	$(INSTALL_DATA) $(VPATH)/doc/$(progname).1 "$(DESTDIR)$(mandir)/man1/$(program_prefix)$(progname).1"
 
-uninstall : uninstall-info uninstall-man
-	-rm -f $(DESTDIR)$(bindir)/$(program_prefix)$(progname)
-	-rm -f $(DESTDIR)$(bindir)/$(program_prefix)r$(progname)
+install-man : install-man-base
+	cd "$(DESTDIR)$(mandir)/man1" && ln -s "$(program_prefix)$(progname).1" "$(program_prefix)v$(progname).1"
+
+install-man-compress : install-man-base
+	lzip -v -9 "$(DESTDIR)$(mandir)/man1/$(program_prefix)$(progname).1"
+	cd "$(DESTDIR)$(mandir)/man1" && ln -s "$(program_prefix)$(progname).1.lz" "$(program_prefix)v$(progname).1.lz"
+
+uninstall : uninstall-man uninstall-info uninstall-bin
+
+uninstall-bin :
+	-rm -f "$(DESTDIR)$(bindir)/$(program_prefix)$(progname)"
+	-rm -f "$(DESTDIR)$(bindir)/$(program_prefix)v$(progname)"
 
 uninstall-info :
-	-install-info --remove $(DESTDIR)$(infodir)/$(program_prefix)$(progname).info $(DESTDIR)$(infodir)/dir
-	-rm -f $(DESTDIR)$(infodir)/$(program_prefix)$(progname).info
+	-if $(CAN_RUN_INSTALLINFO) ; then \
+	  install-info --info-dir="$(DESTDIR)$(infodir)" --remove "$(DESTDIR)$(infodir)/$(program_prefix)$(pkgname).info" ; \
+	fi
+	-rm -f "$(DESTDIR)$(infodir)/$(program_prefix)$(pkgname).info"*
 
 uninstall-man :
-	-rm -f $(DESTDIR)$(mandir)/man1/$(program_prefix)$(progname).1
-	-rm -f $(DESTDIR)$(mandir)/man1/$(program_prefix)r$(progname).1
+	-rm -f "$(DESTDIR)$(mandir)/man1/$(program_prefix)$(progname).1"*
+	-rm -f "$(DESTDIR)$(mandir)/man1/$(program_prefix)v$(progname).1"*
 
-dist :
+dist : doc
 	ln -sf $(VPATH) $(DISTNAME)
-	tar -cvf $(DISTNAME).tar \
+	tar -Hustar --owner=root --group=root -cvf $(DISTNAME).tar \
 	  $(DISTNAME)/AUTHORS \
 	  $(DISTNAME)/COPYING \
 	  $(DISTNAME)/ChangeLog \
@@ -112,26 +141,25 @@ dist :
 	  $(DISTNAME)/Makefile.in \
 	  $(DISTNAME)/NEWS \
 	  $(DISTNAME)/README \
-	  $(DISTNAME)/TODO \
 	  $(DISTNAME)/configure \
 	  $(DISTNAME)/doc/$(progname).1 \
-	  $(DISTNAME)/doc/$(progname).info \
-	  $(DISTNAME)/doc/$(progname).texinfo \
-	  $(DISTNAME)/doc/fdl.texinfo \
-	  $(DISTNAME)/testsuite/check.sh \
-	  $(DISTNAME)/testsuite/*.t \
-	  $(DISTNAME)/testsuite/*.d \
-	  $(DISTNAME)/testsuite/*.r \
-	  $(DISTNAME)/testsuite/*.pr \
-	  $(DISTNAME)/testsuite/*.err \
-	  $(DISTNAME)/testsuite/*.posix \
+	  $(DISTNAME)/doc/$(pkgname).info \
+	  $(DISTNAME)/doc/$(pkgname).texi \
+	  $(DISTNAME)/doc/fdl.texi \
+	  $(DISTNAME)/v$(progname).in \
 	  $(DISTNAME)/*.h \
-	  $(DISTNAME)/*.c
+	  $(DISTNAME)/*.c \
+	  $(DISTNAME)/testsuite/check.sh \
+	  $(DISTNAME)/testsuite/test.bin \
+	  $(DISTNAME)/testsuite/test.txt \
+	  $(DISTNAME)/testsuite/*.ed \
+	  $(DISTNAME)/testsuite/*.r \
+	  $(DISTNAME)/testsuite/*.err
 	rm -f $(DISTNAME)
 	lzip -v -9 $(DISTNAME).tar
 
 clean :
-	-rm -f $(progname) r$(progname) $(progname)_profiled $(objs)
+	-rm -f $(progname) v$(progname) $(objs)
 
 distclean : clean
 	-rm -f Makefile config.status *.tar *.tar.lz

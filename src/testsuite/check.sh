@@ -1,104 +1,102 @@
 #! /bin/sh
 # check script for GNU ed - The GNU line editor
-# Copyright (C) 2006, 2007, 2008, 2009 Antonio Diaz Diaz.
+# Copyright (C) 2006-2022 Antonio Diaz Diaz.
 #
 # This script is free software; you have unlimited permission
-# to copy, distribute and modify it.
+# to copy, distribute, and modify it.
 
+LC_ALL=C
+export LC_ALL
 objdir=`pwd`
 testdir=`cd "$1" ; pwd`
 ED="${objdir}"/ed
+framework_failure() { echo "failure in testing framework" ; exit 1 ; }
 
-if [ ! -x "${ED}" ] ; then
+if [ ! -f "${ED}" ] || [ ! -x "${ED}" ] ; then
 	echo "${ED}: cannot execute"
 	exit 1
 fi
 
-if [ -d tmp ] ; then rm -r tmp ; fi
+if [ -d tmp ] ; then rm -rf tmp ; fi
 mkdir tmp
+cd "${objdir}"/tmp || framework_failure
 
-# Generate ed test scripts, with extensions .ed and .red, from
-# .t and .err files, respectively.
-echo "building test scripts for ed..."
-cd "${testdir}"
+cat "${testdir}"/test.txt > test.txt || framework_failure
+cat "${testdir}"/test.bin > test.bin || framework_failure
+touch zero || framework_failure
+fail=0
 
-for i in *.t ; do
-	base=`echo "$i" | sed 's/\.t$//'`
-	(
-	echo "#! /bin/sh"
-	echo "${ED} -s <<'EOT'"
-	echo H
-	echo "r ${testdir}/${base}.d"
-	cat "$i"
-	echo "w ${base}.o"
-	echo EOT
-	) > "${objdir}/tmp/${base}.ed"
-	chmod u+x "${objdir}/tmp/${base}.ed"
-done
+printf "testing ed-%s...\n" "$2"
 
-for i in *.err ; do
-	base=`echo "$i" | sed 's/\.err$//'`
-	(
-	echo "#! /bin/sh -"
-	echo "${ED} -s <<'EOT'"
-	echo H
-	echo "r ${testdir}/${base}.err"
-	cat "$i"
-	echo "w ${base}.ro"
-	echo EOT
-	) > "${objdir}/tmp/${base}.red"
-	chmod u+x "${objdir}/tmp/${base}.red"
-done
-
-
-# Run the .ed and .red scripts just generated
-# and compare their output against the .r files, which contain
-# the correct output.
-echo "testing ed..."
-cd "${objdir}"/tmp
-
-# Run the *.red scripts first, since these don't generate output;
-# they exit with non-zero status
-for i in *.red ; do
-	echo "$i"
-	if ./"$i" ; then
-		echo "*** The script $i exited abnormally  ***"
-	fi
-done > errs.ck 2>&1
-
-# Run error scripts again as pipes - these should generate output and
-# exit with error (>0) status.
-for i in *.red ; do
-	base=`echo "$i" | sed 's/\.red$//'`
-	if cat  ${base}.red | "${ED}" -s ; then
-		echo "*** The piped script $i exited abnormally ***"
-	else
-		if cmp -s ${base}.ro "${testdir}"/${base}.pr ; then
-			true
-		else
-			echo "*** Output ${base}.ro of piped script $i is incorrect ***"
-		fi
-	fi
-done > pipes.ck 2>&1
-
-# Run the remainding scripts; they exit with zero status
-for i in *.ed ; do
-	base=`echo "$i" | sed 's/\.ed$//'`
-	if ./${base}.ed ; then
-		if cmp -s ${base}.o "${testdir}"/${base}.r ; then
-			true
-		else
-			echo "*** Output ${base}.o of script $i is incorrect ***"
-		fi
-	else
+# Run the .err scripts first with a regular file connected to standard
+# input, since these don't generate output; they exit with non-zero status.
+for i in "${testdir}"/*.err ; do
+	if "${ED}" -s test.txt < "$i" > /dev/null 2>&1 ; then
 		echo "*** The script $i exited abnormally ***"
+		fail=127
 	fi
-done > scripts.ck 2>&1
+done
 
-grep '\*\*\*' *.ck | sed 's/^[^*]*//'
-if grep '\*\*\*' *.ck > /dev/null ; then
-	exit 127
-else
+# Run the .err scripts again with a regular file connected to standard
+# input, but with '--loose-exit-status'; they should exit with zero status.
+for i in "${testdir}"/*.err ; do
+	if "${ED}" -sl test.txt < "$i" > /dev/null 2>&1 ; then
+		true
+	else
+		echo "*** The script $i failed '--loose-exit-status' ***"
+		fail=127
+	fi
+done
+
+# Run the .err scripts again as pipes - these should exit with non-zero
+# status without altering the contents of the buffer; the produced
+# 'out.ro' must be identical to 'test.txt'.
+for i in "${testdir}"/*.err ; do
+	base=`echo "$i" | sed 's,^.*/,,;s,\.err$,,'`	# remove dir and ext
+	if cat "$i" | "${ED}" -s test.txt > /dev/null 2>&1 ; then
+		echo "*** The piped script $i exited abnormally ***"
+		fail=127
+	else
+		if cmp -s out.ro test.txt ; then
+			true
+		else
+			mv -f out.ro ${base}.ro
+			echo "*** Output ${base}.ro of piped script $i is incorrect ***"
+			fail=127
+		fi
+	fi
+	rm -f out.ro
+done
+
+# Run the .ed scripts and compare their output against the .r files,
+# which contain the correct output.
+# The .ed scripts should exit with zero status.
+for i in "${testdir}"/*.ed ; do
+	base=`echo "$i" | sed 's,^.*/,,;s,\.ed$,,'`	# remove dir and ext
+	if "${ED}" -s test.txt < "$i" > /dev/null 2> out.log ; then
+		if cmp -s out.o "${testdir}"/${base}.r ; then
+			true
+		else
+			mv -f out.o ${base}.o
+			echo "*** Output ${base}.o of script $i is incorrect ***"
+			fail=127
+		fi
+	else
+		mv -f out.log ${base}.log
+		echo "*** The script $i exited abnormally ***"
+		fail=127
+	fi
+	rm -f out.o out.log
+done
+
+rm -f test.txt test.bin zero
+
+if [ ${fail} = 0 ] ; then
 	echo "tests completed successfully."
-	if cd "${objdir}" ; then rm -r tmp ; fi
+	cd "${objdir}" && rm -r tmp
+else
+	echo "tests failed."
+	echo "Please, send a bug report to bug-ed@gnu.org."
+	echo "Include the (compressed) contents of '${objdir}/tmp' in the report."
 fi
+exit ${fail}
