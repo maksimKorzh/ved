@@ -1,6 +1,10 @@
-# Object files
+# binaries
 src/ved
 src/rved
+
+# object files
 src/*.o
+
+# configure/build files
 src/config.status
 src/Makefile
