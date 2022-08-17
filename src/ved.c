@@ -44,7 +44,6 @@ void print_message_bar(struct buffer *buf) {
   append_buffer(buf, CLEAR_LINE, 3);
   int msglen = strlen(info_message);
   if (msglen > COLS) msglen = COLS;
-  //if (msglen && time(NULL) - info_time < 5)
   if (msglen) append_buffer(buf, info_message, msglen);
 }
 

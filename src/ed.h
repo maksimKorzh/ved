@@ -79,6 +79,18 @@ static const char * const no_prev_subst = "No previous substitution";
 /* visual screen buffer */
 struct buffer;
 
+/* tab width in spaces */
+int TAB_WIDTH;
+
+/* visual editor variables */
+int ROWS;
+int COLS;
+int cury;
+int curx;
+int tabsx;
+int row_offset;
+int col_offset;
+
 /* command/visual modes*/
 char mode;
 

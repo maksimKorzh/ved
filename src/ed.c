@@ -42,7 +42,7 @@ static bool prompt_on = false;		/* if set, show command prompt */
 static bool verbose = false;		/* if set, print all error messages */
 
 
-void invalid_address( void ) { set_error_msg( "Invalid address" ); }
+void invalid_address( void ) { print_info_message( "Invalid address" ); }
 
 bool set_def_filename( const char * const s )
   {
@@ -82,7 +82,7 @@ static int markno;				/* line marker count */
 static bool mark_line_node( const line_t * const lp, int c )
   {
   c -= 'a';
-  if( c < 0 || c >= 26 ) { set_error_msg( inv_mark_ch ); return false; }
+  if( c < 0 || c >= 26 ) { print_info_message( inv_mark_ch ); return false; }
   if( !mark[c] ) ++markno;
   mark[c] = lp;
   return true;
@@ -102,7 +102,7 @@ void unmark_line_node( const line_t * const lp )
 static int get_marked_node_addr( int c )
   {
   c -= 'a';
-  if( c < 0 || c >= 26 ) { set_error_msg( inv_mark_ch ); return -1; }
+  if( c < 0 || c >= 26 ) { print_info_message( inv_mark_ch ); return -1; }
   return get_line_node_addr( mark[c] );
   }
 
@@ -118,14 +118,14 @@ static const char * get_shell_command( const char ** const ibufpp )
   int i = 0, len = 0;
   bool replacement = false;		/* true if '!' or '%' are replaced */
 
-  if( restricted() ) { set_error_msg( "Shell access restricted" ); return 0; }
+  if( restricted() ) { print_info_message( "Shell access restricted" ); return 0; }
   if( !get_extended_line( ibufpp, &len, true ) ) return 0;
   if( !resize_buffer( &buf, &bufsz, len + 1 ) ) return 0;
   if( **ibufpp != '!' ) buf[i++] = '!';		/* prefix command w/ bang */
   else				/* replace '!' with the previous command */
     {
     if( shcmdlen <= 0 || ( traditional() && !shcmd[1] ) )
-      { set_error_msg( no_prev_com ); return 0; }
+      { print_info_message( no_prev_com ); return 0; }
     memcpy( buf, shcmd, shcmdlen );		/* bufsz >= shcmdlen */
     i += shcmdlen; ++*ibufpp; replacement = true;
     }
@@ -134,7 +134,7 @@ static const char * get_shell_command( const char ** const ibufpp )
     if( **ibufpp == '%' )	/* replace '%' with the default filename */
       {
       const char * p;
-      if( !def_filename[0] ) { set_error_msg( no_cur_fn ); return 0; }
+      if( !def_filename[0] ) { print_info_message( no_cur_fn ); return 0; }
       p = strip_escapes( def_filename );
       if( !p ) return 0;
       len = strlen( p );
@@ -184,10 +184,10 @@ const char * get_filename( const char ** const ibufpp,
     if( **ibufpp == '!' )
       { ++*ibufpp; return get_shell_command( ibufpp ); }
     else if( size > pmax )
-      { set_error_msg( "Filename too long" ); return 0; }
+      { print_info_message( "Filename too long" ); return 0; }
     }
   else if( !traditional_f_command && !def_filename[0] )
-    { set_error_msg( no_cur_fn ); return 0; }
+    { print_info_message( no_cur_fn ); return 0; }
   if( !resize_buffer( &buf, &bufsz, pmax + 1 ) ) return 0;
   for( n = 0; **ibufpp != '\n'; ++n, ++*ibufpp ) buf[n] = **ibufpp;
   buf[n] = 0;
@@ -208,13 +208,13 @@ static bool parse_int( int * const i, const char * const str,
   if( tail ) *tail = tmp;
   if( tmp == str )
     {
-    set_error_msg( "Bad numerical result" );
+    print_info_message( "Bad numerical result" );
     *i = 0;
     return false;
     }
   if( errno == ERANGE || li > INT_MAX || li < -INT_MAX )
     {
-    set_error_msg( "Numerical result out of range" );
+    print_info_message( "Numerical result out of range" );
     *i = 0;
     return false;
     }
@@ -314,7 +314,7 @@ static bool get_third_addr( const char ** const ibufpp, int * const addr )
 
   if( addr_cnt < 0 ) return false;
   if( traditional() && addr_cnt == 0 )
-    { set_error_msg( "Destination expected" ); return false; }
+    { print_info_message( "Destination expected" ); return false; }
   if( second_addr < 0 || second_addr > last_addr() )
     { invalid_address(); return false; }
   *addr = second_addr;
@@ -361,7 +361,7 @@ static bool get_command_suffix( const char ** const ibufpp,
     else break;
     ++*ibufpp;
     }
-  if( *(*ibufpp)++ != '\n' ) { set_error_msg( inv_com_suf ); return false; }
+  if( *(*ibufpp)++ != '\n' ) { print_info_message( inv_com_suf ); return false; }
   return true;
   }
 
@@ -394,21 +394,21 @@ static bool get_command_s_suffix( const char ** const ibufpp,
     ++*ibufpp;
     }
   if( error || *(*ibufpp)++ != '\n' )
-    { set_error_msg( inv_com_suf ); return false; }
+    { print_info_message( inv_com_suf ); return false; }
   return true;
   }
 
 
 static bool unexpected_address( const int addr_cnt )
   {
-  if( addr_cnt > 0 ) { set_error_msg( "Unexpected address" ); return true; }
+  if( addr_cnt > 0 ) { print_info_message( "Unexpected address" ); return true; }
   return false;
   }
 
 static bool unexpected_command_suffix( const unsigned char ch )
   {
   if( !isspace( ch ) )
-    { set_error_msg( "Unexpected command suffix" ); return true; }
+    { print_info_message( "Unexpected command suffix" ); return true; }
   return false;
   }
 
@@ -449,12 +449,12 @@ static bool command_s( const char ** const ibufpp, int * const pflagsp,
                 else { sflags |= sf_r; ++*ibufpp; } break;
       default : if( sflags ) error = true;
       }
-    if( error ) { set_error_msg( inv_com_suf ); return false; }
+    if( error ) { print_info_message( inv_com_suf ); return false; }
     }
   while( sflags && **ibufpp != '\n' );
   if( sflags )
     {
-    if( !subst_regex() ) { set_error_msg( no_prev_subst ); return false; }
+    if( !subst_regex() ) { print_info_message( no_prev_subst ); return false; }
     if( ( sflags & sf_r ) && !replace_subst_re_by_search_re() ) return false;
     if( sflags & sf_p ) pflags ^= pmask;
     }
@@ -529,27 +529,26 @@ static int exec_command( const char ** const ibufpp, const int prev_status,
               if( fnp[0] && fnp[0] != '!' && !set_def_filename( fnp ) )
                 return ERR;
               if( read_file( fnp[0] ? fnp : def_filename, 0 ) < 0 ) return ERR;
-              reset_undo_state(); set_modified( false ); mode = 'v';
+              reset_undo_state(); set_modified( false );
               break;
     case 'f': if( unexpected_address( addr_cnt ) ||
                   unexpected_command_suffix( **ibufpp ) ) return ERR;
               fnp = get_filename( ibufpp, traditional() );
               if( !fnp ) return ERR;
               if( fnp[0] == '!' )
-                { set_error_msg( "Invalid redirection" ); return ERR; }
+                { print_info_message( "Invalid redirection" ); return ERR; }
               if( fnp[0] && !set_def_filename( fnp ) ) return ERR;
               {
               const char * const stripped_name = strip_escapes( def_filename );
               if( !stripped_name ) return ERR;
               printf( "%s\n", stripped_name );
-              print_info_message(stripped_name); mode = 'v';
               }
               break;
     case 'g':
     case 'v':
     case 'G':
     case 'V': if( isglobal )
-                { set_error_msg( "Cannot nest global commands" ); return ERR; }
+                { print_info_message( "Cannot nest global commands" ); return ERR; }
               n = ( c == 'g' || c == 'G' );	/* mark matching lines */
               if( !check_addr_range( 1, last_addr(), addr_cnt ) ||
                   !build_active_list( ibufpp, first_addr, second_addr, n ) )
@@ -594,7 +593,7 @@ pflabel:      if( !check_addr_range2( addr_cnt ) ||
     case 'm': if( !check_addr_range2( addr_cnt ) ||
                   !get_third_addr( ibufpp, &addr ) ) return ERR;
               if( addr >= first_addr && addr < second_addr )
-                { set_error_msg( "Invalid destination" ); return ERR; }
+                { print_info_message( "Invalid destination" ); return ERR; }
               if( !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
               if( !move_lines( first_addr, second_addr, addr, isglobal ) )
@@ -681,7 +680,7 @@ pflabel:      if( !check_addr_range2( addr_cnt ) ||
               fnp = get_shell_command( ibufpp );
               if( !fnp ) return ERR;
               if( system( fnp + 1 ) < 0 )
-                { set_error_msg( "Can't create shell process" ); return ERR; }
+                { print_info_message( "Can't create shell process" ); return ERR; }
               if( !scripted() ) fputs( "!\n", stdout );
               break;
     case '\n': if( !check_second_addr( current_addr() +
@@ -690,7 +689,7 @@ pflabel:      if( !check_addr_range2( addr_cnt ) ||
               break;
     case '#': while( *(*ibufpp)++ != '\n' ) {}
               break;
-    default : set_error_msg( "Unknown command" ); return ERR;
+    default : print_info_message( "Unknown command" ); return ERR;
     }
   if( pflags && !print_lines( current_addr(), current_addr(), pflags ) )
     return ERR;
@@ -734,7 +733,7 @@ static int exec_global( const char ** const ibufpp, const int pflags,
       if( len <= 0 ) return ERR;			/* EOF */
       if( len == 1 && strcmp( *ibufpp, "\n" ) == 0 ) continue;
       if( len == 2 && strcmp( *ibufpp, "&\n" ) == 0 )
-        { if( !cmd ) { set_error_msg( no_prev_com ); return ERR; } }
+        { if( !cmd ) { print_info_message( no_prev_com ); return ERR; } }
       else
         {
         if( !get_extended_line( ibufpp, &len, false ) ||
@@ -763,7 +762,6 @@ static void script_error( void )
 int main_loop( const bool initial_error, const bool loose )
   {
   extern jmp_buf jmp_state;
-  //const char * nofile = "[no file]";
   const char * ibufp;			/* pointer to command buffer */
   volatile int err_status = 0;		/* program exit status */
   int len = 0, status;
@@ -773,37 +771,29 @@ int main_loop( const bool initial_error, const bool loose )
   status = setjmp( jmp_state );
   if( status == 0 )			/* direct invocation of setjmp */
     { enable_interrupts(); if( initial_error ) { status = -1; err_status = 1; } }
-  else { status = -1; fputs( "\n?\n", stdout ); set_error_msg( "Interrupt" ); }
+  else { status = -1; fputs( "\n?\n", stdout ); print_info_message( "Interrupt" ); }
 
   while( true )
     {
-    
     if (mode == 'v') ved_loop(&ibufp);
-    
     fflush( stdout ); fflush( stderr );
     if( status < 0 && verbose ) { printf( "%s\n", errmsg ); fflush( stdout ); }
     if( prompt_on ) { fputs( prompt_str, stdout ); fflush( stdout ); }
-    
-    
     ibufp = command_prompt(":%s", &len);
     if (mode == 'v') continue;
-    
-    
     if( !ibufp ) return 2;			/* an error happened */
     if( len <= 0 )				/* EOF on stdin ('q') */
       {
       if( !modified() || status == EMOD ) status = QUIT;
       else { status = EMOD; if( !loose ) err_status = 2; }
       }
-    else status = exec_command( &ibufp, status, false );
-    if( status == 0 ) continue;
+    else { status = exec_command( &ibufp, status, false ); mode = 'v'; }
+    if( status == 0 ) { cury = first_addr ? first_addr-1 : 0; curx = 0; continue; }
     if( status == QUIT ) return err_status;
     fputs( "?\n", stdout );			/* give warning */
     if( !loose && err_status == 0 ) err_status = 1;
     if( status == EMOD ) {
-      set_error_msg( "Warning: buffer modified" );
-      print_info_message("Warning: buffer modified");
-      mode = 'v';
+      print_info_message( "Warning: buffer modified" );
     }
     if( is_regular_file( 0 ) )
       { script_error(); return ( ( status == FATAL ) ? 1 : err_status ); }
