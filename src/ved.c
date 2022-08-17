@@ -16,7 +16,7 @@ int lastx = 0;
 int row_offset = 0;
 int col_offset = 0;
 
-/* visual editor's 'screen' */
+/* visual editor's screen buffer */
 struct buffer {
   char *string;
   int len;
@@ -67,17 +67,17 @@ void print_status_bar(struct buffer *buf) {
 /* print intro */
 int print_intro_line(struct buffer * buf, char *line, int row, int offset, char * arg) {
     if (last_addr() == 0 && row == (ROWS / 3) + offset) {
-        char welcome[80];
-        int welcomelen = snprintf(welcome, sizeof(welcome), "%s%s", line, arg);
-        if (welcomelen > COLS) welcomelen = COLS;
-        int padding = (COLS - welcomelen) / 2;
-        if (padding) {
-          append_buffer(buf, "~", 1);
-          padding--;
-        }
-        while (padding--) append_buffer(buf, " ", 1);
-        append_buffer(buf, welcome, welcomelen);
-        return 1;
+      char welcome[80];
+      int welcomelen = snprintf(welcome, sizeof(welcome), "%s%s", line, arg);
+      if (welcomelen > COLS) welcomelen = COLS;
+      int padding = (COLS - welcomelen) / 2;
+      if (padding) {
+        append_buffer(buf, "~", 1);
+        padding--;
+      }
+      while (padding--) append_buffer(buf, " ", 1);
+      append_buffer(buf, welcome, welcomelen);
+      return 1;
     } else return 0;
 }
 
@@ -150,14 +150,7 @@ void update_screen() {
 void read_keyboard(int loose) {
   int c = read_key();
   switch(c) {
-    //case (('q') & 0x1f): clear_screen(); exit(0); break;
-    /*case ':': {
-        int status = ed_loop(loose);
-        if (status) {
-            clear_screen();
-            exit(status);
-        }
-    }*/
+    case ':': mode = 'e'; break;
     //case '\r': insert_new_line(); break;
     //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
     //default: insert_char(c); break;
@@ -172,10 +165,11 @@ void init_ved() {
 }
 
 /* visual editor loop */
-int ved_loop(int loose) {
+void ved_loop(int loose) {
   //return 0;
-  /*while (1) {
+  while (1) {
     update_screen();
     read_keyboard(loose);
-  }*/
+    if (mode == 'e') return;
+  }
 }

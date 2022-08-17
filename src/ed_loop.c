@@ -26,6 +26,7 @@
 
 
 enum Status { ERR = -2, EMOD = -3, FATAL = -4 };
+char mode = 'v'; // modes: 'e' - ed command move; 'v' - visual mode 
 
 static char def_filename[1024] = "";	/* default filename */
 static char errmsg[80] = "";		/* error message buffer */
@@ -663,7 +664,10 @@ int ed_loop( const char loose )
   if( !status ) enable_interrupts();
   else { status = -1; fputs( "\n?\n", stderr ); set_error_msg( "Interrupt" ); }
   while( 1 )
-    {//update_screen();
+    {
+
+    if (mode == 'v') ved_loop();
+    
     if( status < 0 && verbose ) fprintf( stderr, "%s\n", errmsg );
     if( prompt_on ) { /*printf( "%s", prompt_str ); fflush( stdout );*/ }
 
@@ -671,7 +675,7 @@ int ed_loop( const char loose )
     //print_info_message("ed loop");
     ibufp = command_prompt(":%s", &len); //print_info_message(ibufp);
     
-    
+    if (mode == 'v') continue;
     if (!ibufp) return err_status;
     if( !len )
       {
@@ -701,7 +705,7 @@ int ed_loop( const char loose )
       if( old_status == EMOD ) return err_status;
       fputs( "?\n", stderr );				/* give warning */
       set_error_msg( "Warning: file modified" );
-      print_info_message("Warning: file modified"); read_key();
+      print_info_message("Warning: file modified"); mode = 'v';
       if( is_regular_file( 0 ) )
         {
         if( verbose ) fprintf( stderr, "script, line %d: %s\n", linenum, errmsg );

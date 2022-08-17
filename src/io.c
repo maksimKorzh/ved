@@ -338,6 +338,7 @@ char *command_prompt(char *prompt, int *lenp) {
       print_info_message("");
       free(buf);
       *lenp = 0;
+      mode = 'v';
       return NULL;
     } else if (c == '\r') {
       if (buflen != 0) {

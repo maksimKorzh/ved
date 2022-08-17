@@ -67,11 +67,14 @@ undo_t;
 #define CLEAR_SCREEN "\x1b[2J"
 #define RESTORE_VIDEO "\x1b[m"
 
-// Special keys
+/* Special keys */
 #define BACKSPACE 127
 
-// visual screen buffer
+/* visual screen buffer */
 struct buffer;
+
+/* command/visual modes*/
+char mode;
 
 /* defined in buffer.c */
 char append_lines( const char *ibufp, const int addr, const char isglobal );
@@ -180,6 +183,6 @@ void clear_buffer(struct buffer *buf);
 void update_screen();
 void read_keyboard();
 void init_ved();
-int ved_loop();
+void ved_loop();
 
 
