@@ -529,7 +529,7 @@ static int exec_command( const char ** const ibufpp, const int prev_status,
               if( fnp[0] && fnp[0] != '!' && !set_def_filename( fnp ) )
                 return ERR;
               if( read_file( fnp[0] ? fnp : def_filename, 0 ) < 0 ) return ERR;
-              reset_undo_state(); set_modified( false );
+              reset_undo_state(); set_modified( false ); mode = 'v';
               break;
     case 'f': if( unexpected_address( addr_cnt ) ||
                   unexpected_command_suffix( **ibufpp ) ) return ERR;

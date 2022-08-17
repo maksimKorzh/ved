@@ -188,7 +188,7 @@ void update_screen() {
 
 // control cursor
 void move_cursor(int key) {
-  line_t *row = (cury >= last_addr()+1) ? NULL : search_line_node(cury+1);
+  line_t *row = (cury >= last_addr()) ? NULL : search_line_node(cury+1);
 
   switch(key) {
     case 'h':
@@ -197,28 +197,13 @@ void move_cursor(int key) {
         cury--;
         curx = text[cury].len;
       }*/ break;
-    case 'l':
-      if (row && curx < row->len) curx++;
-      /*else if (row && curx == row->len && cury != total_lines - 1) {
-        cury++;
-        curx = 0;
-      }*/ break;
-    /*case 'k':
-      if (cury != 0) {
-        cury--;
-        curx = lastx;
-      } else curx = 0;
-      break;
-    case 'j':
-      if (total_lines && cury != total_lines - 1) {
-        cury++;
-        curx = lastx;
-      } else if (cury == total_lines - 1) curx = text[total_lines].rlen;
-      break;*/
+    case 'l': if (row && curx < row->len-1) curx++; break;
+    case 'k': if (cury != 0) cury--; break;
+    case 'j': if (last_addr() && cury != last_addr()-1) cury++; break;
   }
-  //row = (cury >= total_lines) ? NULL : &text[cury];
-  //int rowlen = row ? row->len : 0;
-  //if (curx > rowlen) curx = rowlen;
+  row = (cury >= last_addr()) ? NULL : search_line_node(cury+1);
+  int rowlen = row ? row->len : 0;
+  if (curx > rowlen) curx = rowlen-1;
 }
 
 /* process keypress */
