@@ -6,15 +6,20 @@
 
 #include "ed.h"
 
+/* tab width in spaces */
+int TAB_WIDTH = 4;
+
 /* visual editor variables */
 int ROWS = 24;
 int COLS = 80;
 int cury = 0;
 int curx = 0;
 int tabsx = 0;
-int lastx = 0;
 int row_offset = 0;
 int col_offset = 0;
+
+/* visaul editor's mode (normal/insert) */
+char vmode = 'n';
 
 /* visual editor's screen buffer */
 struct buffer {
@@ -81,6 +86,24 @@ int print_intro_line(struct buffer * buf, char *line, int row, int offset, char 
     } else return 0;
 }
 
+// render row from text buffer
+char *render_row(char *line, int len, int *rlen) {
+  int tabs = 0;
+  for (int col = 0; col < len; col++) if (line[col] == '\t') tabs++;
+  //free(row->render);
+  char *render = malloc(len + tabs*(TAB_WIDTH - 1) + 1);
+  int index = 0;
+  for (int col = 0; col < len; col++) {
+    if (line[col] == '\t') {
+      render[index++] = ' ';
+      while (index % TAB_WIDTH != 0) render[index++] = ' ';
+    } else render[index++] = line[col];
+  }
+  render[index] = '\0';
+  *rlen = index;
+  return render;
+}
+
 /* print display buffer */
 void print_buffer(struct buffer *buf) {
   for (int row = 0; row < ROWS; row++) {
@@ -97,10 +120,21 @@ void print_buffer(struct buffer *buf) {
     } else {
       line_t *lp = search_line_node(bufrow);
       char *line = get_sbuf_line(lp);
-      int len = lp->len - col_offset;
+      
+      int rlen = 0;
+      char *rline = render_row(line, lp->len, &rlen);
+      
+      int len = rlen - col_offset;
       if (len < 0) len = 0;
       if (len > COLS) len = COLS;
-      append_buffer(buf, line + col_offset, len);
+      append_buffer(buf, rline + col_offset, len);
+
+      /*
+      int len = text[bufrow].rlen - col_offset;
+      if (len < 0) len = 0;
+      if (len > COLS) len = COLS;
+      append_buffer(buf, &text[bufrow].render[col_offset], len);
+      */
     }
     append_buffer(buf, CLEAR_LINE, 3);
     append_buffer(buf, "\r\n", 2);
@@ -116,10 +150,21 @@ void append_buffer(struct buffer *buf, const char *string, int len) {
   buf->len += len;
 }
 
+/* render tabs */
+int curx_to_tabsx(char *line, int current_x) {
+  int render_x = 0;
+  for (int col = 0; col < current_x; col++) {
+    if (line[col] == '\t') render_x += (TAB_WIDTH - 1) - (render_x % TAB_WIDTH);
+    render_x++;
+  } return render_x;
+}
+
 /* scroll display buffer */
 void scroll_buffer() {
   tabsx = 0;
-  //if (cury < total_lines) tabsx = curx_to_tabsx(&text[cury], curx);
+  line_t *lp = search_line_node(cury+1);
+  char *line = get_sbuf_line(lp);
+  if (cury < last_addr()+1) tabsx = curx_to_tabsx(line, curx);
   if (cury < row_offset) { row_offset = cury; }
   if (cury >= row_offset + ROWS) { row_offset = cury - ROWS + 1; }
   if (tabsx < col_offset) col_offset = tabsx;
@@ -146,11 +191,50 @@ void update_screen() {
   clear_buffer(&buf);
 }
 
+// control cursor
+void move_cursor(int key) {
+  line_t *row = (cury >= last_addr()+1) ? NULL : search_line_node(cury+1);
+
+  switch(key) {
+    case 'h':
+      if (curx != 0) curx--;
+      /*else if (cury > 0) {
+        cury--;
+        curx = text[cury].len;
+      }*/ break;
+    case 'l':
+      if (row && curx < row->len) curx++;
+      /*else if (row && curx == row->len && cury != total_lines - 1) {
+        cury++;
+        curx = 0;
+      }*/ break;
+    /*case 'k':
+      if (cury != 0) {
+        cury--;
+        curx = lastx;
+      } else curx = 0;
+      break;
+    case 'j':
+      if (total_lines && cury != total_lines - 1) {
+        cury++;
+        curx = lastx;
+      } else if (cury == total_lines - 1) curx = text[total_lines].rlen;
+      break;*/
+  }
+  //row = (cury >= total_lines) ? NULL : &text[cury];
+  //int rowlen = row ? row->len : 0;
+  //if (curx > rowlen) curx = rowlen;
+}
+
 /* process keypress */
 void read_keyboard(int loose) {
   int c = read_key();
   switch(c) {
     case ':': mode = 'e'; break;
+    case 'h':
+    case 'l':
+    case 'k':
+    case 'j': move_cursor(c); break;
     //case '\r': insert_new_line(); break;
     //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
     //default: insert_char(c); break;
