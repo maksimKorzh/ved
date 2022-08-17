@@ -34,7 +34,7 @@ static const char * const inv_com_suf = "Invalid command suffix";
 static const char * const inv_mark_ch = "Invalid mark character";
 static const char * const no_cur_fn   = "No current filename";
 static const char * const no_prev_com = "No previous command";
-static const char * def_filename = "";	/* default filename */
+const char * def_filename = "";	/* default filename */
 static char errmsg[80] = "";		/* error message buffer */
 static const char * prompt_str = "*";	/* command prompt */
 static int first_addr = 0, second_addr = 0;
@@ -168,8 +168,8 @@ static const char * skip_blanks( const char * p )
 
 
 /* return pointer to copy of filename in the command buffer */
-static const char * get_filename( const char ** const ibufpp,
-                                  const bool traditional_f_command )
+const char * get_filename( const char ** const ibufpp,
+                           const bool traditional_f_command )
   {
   static char * buf = 0;
   static int bufsz = 0;
@@ -542,6 +542,7 @@ static int exec_command( const char ** const ibufpp, const int prev_status,
               const char * const stripped_name = strip_escapes( def_filename );
               if( !stripped_name ) return ERR;
               printf( "%s\n", stripped_name );
+              print_info_message(stripped_name); mode = 'v';
               }
               break;
     case 'g':
@@ -762,6 +763,7 @@ static void script_error( void )
 int main_loop( const bool initial_error, const bool loose )
   {
   extern jmp_buf jmp_state;
+  //const char * nofile = "[no file]";
   const char * ibufp;			/* pointer to command buffer */
   volatile int err_status = 0;		/* program exit status */
   int len = 0, status;
@@ -776,7 +778,7 @@ int main_loop( const bool initial_error, const bool loose )
   while( true )
     {
     
-    if (mode == 'v') ved_loop();
+    if (mode == 'v') ved_loop(&ibufp);
     
     fflush( stdout ); fflush( stderr );
     if( status < 0 && verbose ) { printf( "%s\n", errmsg ); fflush( stdout ); }

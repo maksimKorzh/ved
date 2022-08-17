@@ -82,6 +82,9 @@ struct buffer;
 /* command/visual modes*/
 char mode;
 
+/* current file name */
+const char * def_filename;
+
 /* defined in buffer.c */
 bool append_lines( const char ** const ibufpp, const int addr,
                    bool insert, const bool isglobal );

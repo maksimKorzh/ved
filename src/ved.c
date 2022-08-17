@@ -50,10 +50,15 @@ void print_message_bar(struct buffer *buf) {
 
 /* draw status bar */
 void print_status_bar(struct buffer *buf) {
+  int fnlen;
+  for (fnlen = 0; def_filename[fnlen] != '\0'; fnlen++);
   append_buffer(buf, INVERT_VIDEO, 4);
   char message_left[80]; char message_right[80];
-  int len_left = 0;//snprintf(message_left, sizeof(message_left), "%.20s - %d lines %s", filename ? filename : "[No file]", total_lines, modified ? "[modified]" : "");
-  int len_right = snprintf(message_right, sizeof(message_right), "Row %d, Col %d", cury + 1, curx + 1);
+  int len_left = snprintf(message_left,
+    sizeof(message_left), " %.20s - %d lines %s", fnlen ? def_filename : "No file",
+    last_addr(), modified() ? "[modified]" : "");
+  int len_right = snprintf(message_right,
+    sizeof(message_right), "Row %d, Col %d ", cury + 1, curx + 1);
   if (len_left > COLS) len_left = COLS;
   append_buffer(buf, message_left, len_left);
   while (len_left < COLS) {
