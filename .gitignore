@@ -1,2 +1,6 @@
 # Object files
+src/ved
+src/rved
 src/*.o
+src/config.status
+src/Makefile
