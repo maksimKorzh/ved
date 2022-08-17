@@ -234,7 +234,8 @@ void read_keyboard(int loose) {
 /* init visual editor */
 void init_ved() {
   raw_mode();
-  if (get_window_size(&ROWS, &COLS) == -1) die("get_window_size"); ROWS -= 2;
+  if (get_window_size(&ROWS, &COLS) == -1) die("get_window_size");
+  ROWS -= 2;
 }
 
 /* visual editor loop */
