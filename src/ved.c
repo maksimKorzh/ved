@@ -120,21 +120,13 @@ void print_buffer(struct buffer *buf) {
     } else {
       line_t *lp = search_line_node(bufrow);
       char *line = get_sbuf_line(lp);
-      
       int rlen = 0;
       char *rline = render_row(line, lp->len, &rlen);
-      
       int len = rlen - col_offset;
       if (len < 0) len = 0;
       if (len > COLS) len = COLS;
       append_buffer(buf, rline + col_offset, len);
-
-      /*
-      int len = text[bufrow].rlen - col_offset;
-      if (len < 0) len = 0;
-      if (len > COLS) len = COLS;
-      append_buffer(buf, &text[bufrow].render[col_offset], len);
-      */
+      free(rline);
     }
     append_buffer(buf, CLEAR_LINE, 3);
     append_buffer(buf, "\r\n", 2);

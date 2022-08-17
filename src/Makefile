@@ -31,7 +31,7 @@ INSTALL_DIR = $(INSTALL) -d -m 755
 SHELL = /bin/sh
 
 objs = buffer.o carg_parser.o global.o io.o \
-       main.o ed_loop.o regex.o signal.o \
+       main.o ed.o regex.o signal.o \
        terminal.o ved.o
 
 
