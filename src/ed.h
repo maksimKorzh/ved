@@ -171,6 +171,8 @@ void die(const char *message);
 void clear_screen();
 void raw_mode();
 void restore_terminal();
+int get_window_size(int *rows, int *cols);
+int get_cursor(int *rows, int * cols);
 
 /* defined in ved.c */
 void print_info_message(const char *fmt, ...);

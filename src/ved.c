@@ -107,16 +107,14 @@ char *render_row(char *line, int len, int *rlen) {
 /* print display buffer */
 void print_buffer(struct buffer *buf) {
   for (int row = 0; row < ROWS; row++) {
-    int bufrow = row + row_offset-1;
+    int bufrow = row + row_offset+1;
     if (bufrow >= last_addr()+1) {
            if (print_intro_line(buf, "VED - Visual EDitor", row, 0, "")) {}
       else if (print_intro_line(buf, "version ", row, 2, VERSION)) {}
       else if (print_intro_line(buf, "by Code Monkey King", row, 3, "")) {}
       else if (print_intro_line(buf, "Ved is open source and freely distributable", row, 4, "")) {}
       else if (print_intro_line(buf, "freesoft.for.people@gmail.com", row, 6, "")) {}
-      else if (row > 2) {
-        append_buffer(buf, "~", 1);
-      }
+      else if (row) append_buffer(buf, "~", 1);
     } else {
       line_t *lp = search_line_node(bufrow);
       char *line = get_sbuf_line(lp);
@@ -236,8 +234,7 @@ void read_keyboard(int loose) {
 /* init visual editor */
 void init_ved() {
   raw_mode();
-  //if (get_window_size(&ROWS, &COLS) == -1) die("get_window_size");
-  //ROWS -= 2; print_info_message("    QUIT: Ctrl-q | NEW: Ctrl-n | OPEN: Ctrl-O | SAVE: Ctrl-s | SHELL: Ctrl-e");
+  if (get_window_size(&ROWS, &COLS) == -1) die("get_window_size"); ROWS -= 2;
 }
 
 /* visual editor loop */

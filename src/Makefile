@@ -34,7 +34,6 @@ objs = buffer.o carg_parser.o global.o io.o \
        main.o ed.o regex.o signal.o \
        terminal.o ved.o
 
-
 .PHONY : all install install-info install-man install-strip \
          uninstall uninstall-info uninstall-man \
          doc info man check dist clean distclean
