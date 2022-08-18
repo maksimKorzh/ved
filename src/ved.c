@@ -205,34 +205,27 @@ void insert_new_line() {
   char *line = get_sbuf_line(lp);  
   if (line != NULL) {
     int leftlen = curx+3;
-    int rightlen = lp->len - curx + 3;
+    int rightlen = lp->len - curx + 2; //print_info_message("%d", lp->len); read_key();
     char *left = malloc(leftlen);
     char *right = malloc(rightlen);
-    
     for (int i = 0; i < leftlen; i++) {
       if (i < curx) left[i] = line[i];
-      else if (i == curx) left[i] = ' '; // TODO: remove trailing space!
+      else if (i == curx) left[i] = 'x'; // TODO: remove trailing space!
       else if (i == leftlen-2) left[i] = '\n';
       else if (i == leftlen-1) left[i] = '\0';
     } const char *cleft = left;
     delete_lines(cury+1, cury+1, false);
     append_lines(&cleft, current_addr(), current_addr() >= cury+1, true);
-    
     for (int i = 0; i < rightlen; i++) {
       if (i < rightlen-2) right[i] = line[i+curx];
-      if (i == rightlen-2) right[i] = '\n';
+      else if (i == rightlen-2) right[i] = '\n';
       else if (i == rightlen-1) right[i] = '\0';
-    }
-
-    const char *cline = rightlen > 3 ? right : " \n";
-    
-    cury++; curx = 0;
-    
+    } const char *cline = rightlen > 3 ? right : "x\n"; // TODO: remove trailing space!
     append_lines(&cline, current_addr()+1, current_addr()+1 >= cury+1, true);
-    free(left); free(right);
+    cury++; curx = 0; free(left); free(right);
   } else {
     for (int i = 0; i < 2; i++) {
-      char uline[] = " \n"; // TODO: remove trailing space!
+      char uline[] = "x\n"; // TODO: remove trailing space!
       const char *cline = uline;
       if (i) cury++;
       curx = 0;
