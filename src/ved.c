@@ -219,6 +219,10 @@ void insert_char(int c) {
     append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
     free(uline);
     curx++;
+  } else {
+    char uline[] = " \n"; uline[0] = c;
+    const char *cline = uline; curx++;
+    append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
   }
 }
 
@@ -240,19 +244,6 @@ void read_keyboard() {
     //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
     if (c != ((c) & 0x1f)) insert_char(c);
   }
-
-  /*switch(c) {
-    case 0x1b: vmode = 'N'; break;
-    case 'h':
-    case 'l':
-    case 'k':
-    case 'j': if (vmode == 'N') move_cursor(c); break;
-    case ':': if (vmode == 'N') mode = 'e'; break;
-    case 'i': if (vmode == 'N') vmode = 'I'; break;
-    //case '\r': insert_new_line(); break;
-    //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
-    default: if (c != ((c) & 0x1f)) if (vmode == 'I') insert_char(c); break;
-  }*/
 }
 
 /* init visual editor */
