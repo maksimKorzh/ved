@@ -204,24 +204,31 @@ void insert_new_line() {
   line_t *lp = search_line_node(cury+1);
   char *line = get_sbuf_line(lp);  
   if (line != NULL) {
-    int leftlen = curx+2;
-    int rightlen = lp->len - curx + 2; //print_info_message("\\n: lp->len: %d, is_null: %d", lp->len, line == NULL ? 1 : 0); read_key();
-    char *left = malloc(leftlen);
-    char *right = malloc(rightlen);
-    for (int i = 0; i < leftlen; i++) {
-      if (i < curx) left[i] = line[i];
-      else if (i == curx) left[i] = '\n';
-      else if (i == leftlen-1) left[i] = '\0';
-    } const char *cleft = left;
-    delete_lines(cury+1, cury+1, false);
-    append_lines(&cleft, current_addr(), current_addr() >= cury+1, true);
-    for (int i = 0; i < rightlen; i++) {
-      if (i < rightlen-2) right[i] = line[i+curx];
-      else if (i == rightlen-2) right[i] = '\n';
-      else if (i == rightlen-1) right[i] = '\0';
-    } const char *cline = rightlen > 2 ? right : "\n";
-    append_lines(&cline, current_addr()+1, current_addr()+1 >= cury+1, true);
-    cury++; curx = 0; free(left); free(right);
+    if (lp->len) {
+      int leftlen = curx+2;
+      int rightlen = lp->len - curx + 2;
+      char *left = malloc(leftlen);
+      char *right = malloc(rightlen);
+      for (int i = 0; i < leftlen; i++) {
+        if (i < curx) left[i] = line[i];
+        else if (i == curx) left[i] = '\n';
+        else if (i == leftlen-1) left[i] = '\0';
+      } const char *cleft = left;
+      delete_lines(cury+1, cury+1, true);
+      append_lines(&cleft, current_addr(), current_addr() >= cury+1, true);
+      for (int i = 0; i < rightlen; i++) {
+        if (i < rightlen-2) right[i] = line[i+curx];
+        else if (i == rightlen-2) right[i] = '\n';
+        else if (i == rightlen-1) right[i] = '\0';
+      } const char *cline = rightlen > 2 ? right : "\n";
+      append_lines(&cline, current_addr()+1, current_addr()+1 >= cury+1, true);
+      cury++; curx = 0; free(left); free(right);
+    } else {
+      char uline[] = "\n";
+      const char *cline = uline;
+      cury++; curx = 0;
+      append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
+    }
   } else {
     for (int i = 0; i < 2; i++) {
       char uline[] = "\n";
@@ -236,8 +243,7 @@ void insert_new_line() {
 /* inserted char to text buffer row */
 void insert_char(int c) {
   line_t *lp = search_line_node(cury+1);
-  char *line = get_sbuf_line(lp);  
-  //print_info_message("char: lp->len: %d, is_null: %d", lp->len, line == NULL ? 1 : 0); read_key();
+  char *line = get_sbuf_line(lp);
   if (line != NULL) {
     int newlen = lp->len+3;
     char *uline = malloc(newlen);
@@ -247,11 +253,18 @@ void insert_char(int c) {
       else if (i == newlen-2) uline[i] = '\n';
       else if (i == newlen-1) uline[i] = '\0';
       else uline[i] = line[i-1];
-    } const char *cline = uline;
-    delete_lines(cury+1, cury+1, false);
-    append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
-    free(uline);
-    curx++;
+    } if (lp->len) {
+      const char *cline = uline;
+      delete_lines(cury+1, cury+1, true);
+      append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
+      curx++;
+    } else {
+      char uline[] = " \n"; uline[0] = c;
+      const char *cline = uline;
+      delete_lines(cury+1, cury+1, true);
+      append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
+      curx = search_line_node(cury+1)->len;
+    } free(uline);
   } else {
     char uline[] = " \n"; uline[0] = c;
     const char *cline = uline; curx++;
