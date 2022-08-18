@@ -49,15 +49,17 @@ void print_message_bar(struct buffer *buf) {
 
 /* draw status bar */
 void print_status_bar(struct buffer *buf) {
-  int fnlen;
+  int fnlen; int linelen = search_line_node(cury+1)->len;
   for (fnlen = 0; def_filename[fnlen] != '\0'; fnlen++);
   append_buffer(buf, INVERT_VIDEO, 4);
   char message_left[80]; char message_right[80];
   int len_left = snprintf(message_left,
-    sizeof(message_left), "%c %.20s - %d lines %s", vmode, fnlen ? def_filename : "No file",
+    sizeof(message_left), "%c %.20s - %d line(s) %s",
+    vmode, fnlen ? def_filename : "No file",
     last_addr(), modified() ? "[modified]" : "");
   int len_right = snprintf(message_right,
-    sizeof(message_right), "Row %d, Col %d ", cury + 1, curx + 1);
+    sizeof(message_right), "Row %d, Col %d | Len %d ",
+    cury + 1, curx + 1, linelen);
   if (len_left > COLS) len_left = COLS;
   append_buffer(buf, message_left, len_left);
   while (len_left < COLS) {
@@ -240,6 +242,27 @@ void insert_new_line() {
   }
 }
 
+/* delete char*/
+void delete_char() {
+  line_t *lp = search_line_node(cury+1);
+  char *line = get_sbuf_line(lp);
+  if (curx) {
+    int newlen = lp->len+1;
+    char *uline = malloc(newlen);
+    for (int i = 0; i < newlen; i++) {
+      if (i < curx-1) uline[i] = line[i];
+      else if (i == newlen-2) uline[i] = '\n';
+      else if (i == newlen-1) uline[i] = '\0';
+      else uline[i] = line[i+1];
+    } const char *cline = uline;
+    delete_lines(cury+1, cury+1, true);
+    append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
+    curx--;
+  } else {
+  
+  }
+}
+
 /* inserted char to text buffer row */
 void insert_char(int c) {
   line_t *lp = search_line_node(cury+1);
@@ -291,7 +314,7 @@ void read_keyboard() {
     }
   } else if (vmode == 'I') {
     if (c == '\n') insert_new_line();
-    //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
+    else if (c == 127) delete_char();
     else if (c != ((c) & 0x1f)) insert_char(c);
   }
 }

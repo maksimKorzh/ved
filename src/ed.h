@@ -212,6 +212,7 @@ void clear_buffer(struct buffer *buf);
 void update_screen();
 void move_cursor(int key);
 void insert_new_line();
+void delete_char();
 void insert_char(int c);
 void read_keyboard();
 void init_ved();
