@@ -188,7 +188,6 @@ void update_screen() {
 // control cursor
 void move_cursor(int key) {
   line_t *row = (cury >= last_addr()) ? NULL : search_line_node(cury+1);
-
   switch(key) {
     case 'h': if (curx != 0) curx--; break;
     case 'l': if (row && curx < row->len-1) curx++; break;
@@ -197,22 +196,63 @@ void move_cursor(int key) {
   }
   row = (cury >= last_addr()) ? NULL : search_line_node(cury+1);
   int rowlen = row ? row->len : 0;
-  if (curx > rowlen) curx = rowlen-1;
+  if (curx > rowlen-1) curx = rowlen-1;
 }
 
-// inserted char to text buffer row
+/* insert new line */
+void insert_new_line() {
+  line_t *lp = search_line_node(cury+1);
+  char *line = get_sbuf_line(lp);  
+  if (line != NULL) {
+    int leftlen = curx+3;
+    int rightlen = lp->len - curx + 3;
+    char *left = malloc(leftlen);
+    char *right = malloc(rightlen);
+    
+    for (int i = 0; i < leftlen; i++) {
+      if (i < curx) left[i] = line[i];
+      else if (i == curx) left[i] = ' '; // TODO: remove trailing space!
+      else if (i == leftlen-2) left[i] = '\n';
+      else if (i == leftlen-1) left[i] = '\0';
+    } const char *cleft = left;
+    delete_lines(cury+1, cury+1, false);
+    append_lines(&cleft, current_addr(), current_addr() >= cury+1, true);
+    
+    for (int i = 0; i < rightlen; i++) {
+      if (i < rightlen-2) right[i] = line[i+curx];
+      if (i == rightlen-2) right[i] = '\n';
+      else if (i == rightlen-1) right[i] = '\0';
+    }
+
+    const char *cline = rightlen > 3 ? right : " \n";
+    
+    cury++; curx = 0;
+    
+    append_lines(&cline, current_addr()+1, current_addr()+1 >= cury+1, true);
+    free(left); free(right);
+  } else {
+    for (int i = 0; i < 2; i++) {
+      char uline[] = " \n"; // TODO: remove trailing space!
+      const char *cline = uline;
+      if (i) cury++;
+      curx = 0;
+      append_lines(&cline, current_addr()+i, current_addr()+i >= cury+1, true);
+    }
+  }
+}
+
+/* inserted char to text buffer row */
 void insert_char(int c) {
   line_t *lp = search_line_node(cury+1);
   char *line = get_sbuf_line(lp);  
   if (line != NULL) {
     int newlen = lp->len+3;
-    char *uline = malloc(newlen); // len += c + '\n' + '\0'
-    int i;
-    for (i = 0; i < newlen; i++) {
+    char *uline = malloc(newlen);
+    for (int i = 0; i < newlen; i++) {
       if (i < curx) uline[i] = line[i];
       else if (i == curx) uline[i] = c;
-      else if (i == newlen-1) uline[i] = '\0';
       else if (i == newlen-2) uline[i] = '\n';
+      else if (i == newlen-1) uline[i] = '\0';
       else uline[i] = line[i-1];
     } const char *cline = uline;
     delete_lines(cury+1, cury+1, false);
@@ -229,8 +269,10 @@ void insert_char(int c) {
 /* process keypress */
 void read_keyboard() {
   int c = read_key();
-  if (c == 0x1b) vmode = 'N';
-  else if (vmode == 'N') {
+  if (c == 0x1b) {
+    if (vmode == 'I' && curx) curx--;
+    vmode = 'N';
+  } else if (vmode == 'N') {
     switch(c) {
       case 'h':
       case 'l':
@@ -238,11 +280,13 @@ void read_keyboard() {
       case 'j': move_cursor(c); break;
       case ':': mode = 'e'; break;
       case 'i': vmode = 'I'; break;
+      case 'a': vmode = 'I'; curx++; break;
+      case 'A': vmode = 'I'; curx = search_line_node(cury+1)->len; break;
     }
   } else if (vmode == 'I') {
-    //case '\r': insert_new_line(); break;
+    if (c == '\n') insert_new_line();
     //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
-    if (c != ((c) & 0x1f)) insert_char(c);
+    else if (c != ((c) & 0x1f)) insert_char(c);
   }
 }
 
