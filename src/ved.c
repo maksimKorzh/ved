@@ -19,7 +19,7 @@ int row_offset = 0;
 int col_offset = 0;
 
 /* visaul editor's mode (normal/insert) */
-char vmode = 'n';
+char vmode = 'N';
 
 /* visual editor's screen buffer */
 struct buffer {
@@ -54,7 +54,7 @@ void print_status_bar(struct buffer *buf) {
   append_buffer(buf, INVERT_VIDEO, 4);
   char message_left[80]; char message_right[80];
   int len_left = snprintf(message_left,
-    sizeof(message_left), " %.20s - %d lines %s", fnlen ? def_filename : "No file",
+    sizeof(message_left), "%c %.20s - %d lines %s", vmode, fnlen ? def_filename : "No file",
     last_addr(), modified() ? "[modified]" : "");
   int len_right = snprintf(message_right,
     sizeof(message_right), "Row %d, Col %d ", cury + 1, curx + 1);
@@ -198,22 +198,61 @@ void move_cursor(int key) {
   row = (cury >= last_addr()) ? NULL : search_line_node(cury+1);
   int rowlen = row ? row->len : 0;
   if (curx > rowlen) curx = rowlen-1;
-  set_current_addr(cury+1);
+}
+
+// inserted char to text buffer row
+void insert_char(int c) {
+  line_t *lp = search_line_node(cury+1);
+  char *line = get_sbuf_line(lp);  
+  if (line != NULL) {
+    int newlen = lp->len+3;
+    char *uline = malloc(newlen); // len += c + '\n' + '\0'
+    int i;
+    for (i = 0; i < newlen; i++) {
+      if (i < curx) uline[i] = line[i];
+      else if (i == curx) uline[i] = c;
+      else if (i == newlen-1) uline[i] = '\0';
+      else if (i == newlen-2) uline[i] = '\n';
+      else uline[i] = line[i-1];
+    } const char *cline = uline;
+    delete_lines(cury+1, cury+1, false);
+    append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
+    free(uline);
+    curx++;
+  }
 }
 
 /* process keypress */
 void read_keyboard() {
   int c = read_key();
-  switch(c) {
-    case ':': mode = 'e'; break;
+  if (c == 0x1b) vmode = 'N';
+  else if (vmode == 'N') {
+    switch(c) {
+      case 'h':
+      case 'l':
+      case 'k':
+      case 'j': move_cursor(c); break;
+      case ':': mode = 'e'; break;
+      case 'i': vmode = 'I'; break;
+    }
+  } else if (vmode == 'I') {
+    //case '\r': insert_new_line(); break;
+    //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
+    if (c != ((c) & 0x1f)) insert_char(c);
+  }
+
+  /*switch(c) {
+    case 0x1b: vmode = 'N'; break;
     case 'h':
     case 'l':
     case 'k':
-    case 'j': move_cursor(c); break;
+    case 'j': if (vmode == 'N') move_cursor(c); break;
+    case ':': if (vmode == 'N') mode = 'e'; break;
+    case 'i': if (vmode == 'N') vmode = 'I'; break;
     //case '\r': insert_new_line(); break;
     //case BACKSPACE: if (c == DEL) move_cursor(ARROW_RIGHT); delete_char(); break;
-    //default: insert_char(c); break;
-  }
+    default: if (c != ((c) & 0x1f)) if (vmode == 'I') insert_char(c); break;
+  }*/
 }
 
 /* init visual editor */
@@ -225,8 +264,8 @@ void init_ved() {
 
 /* visual editor loop */
 void ved_loop() {
-  //return 0;
   while (1) {
+    set_current_addr(cury+1);
     update_screen();
     read_keyboard();
     if (mode == 'e') return;
