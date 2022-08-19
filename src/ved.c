@@ -259,30 +259,20 @@ void delete_char() {
     append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
     curx--; free(uline);
   } else if (curx <= 0 && cury) {
-  
     line_t *llp = search_line_node(cury); // previous
     const char *lline = strdup(get_sbuf_line(llp));
     int llen = llp->len;
-    
     line_t *rlp = search_line_node(cury+1); // current
     const char *rline = strdup(get_sbuf_line(rlp));
     int rlen = rlp->len;
-    
-    //clear_screen(); printf("%s/%s %d/%d", lline, rline, llen, rlen); exit(0);
-  
     delete_lines(cury+1, cury+1, true);
-    
     int newlen = rlen + llen + 2;
     char *uline = malloc(newlen);
     memcpy(uline, lline, llen+1);
     strncat(uline, rline, rlen);
     uline[newlen-2] = '\n';
     uline[newlen-1] = '\0';
-    
-    //clear_screen(); printf("%s", uline); exit(0);
-    
     cury--; curx = llen;
-    
     const char *cline = uline;
     delete_lines(cury+1, cury+1, true);
     append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
