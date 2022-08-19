@@ -243,11 +243,9 @@ void insert_new_line() {
 }
 
 /* delete char*/
-void delete_char() {//clear_screen(); printf("curx %d", curx); exit(0);
+void delete_char() {  
   line_t *lp = search_line_node(cury+1);
   char *line = get_sbuf_line(lp);
-  char *rline = strdup(line);
-  int rlen = lp->len;
   if (curx > 0) {
     int newlen = lp->len+1;
     char *uline = malloc(newlen);
@@ -261,20 +259,34 @@ void delete_char() {//clear_screen(); printf("curx %d", curx); exit(0);
     append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
     curx--; free(uline);
   } else if (curx <= 0 && cury) {
-    /*delete_lines(cury+1, cury+1, true);
-    line_t *llp = search_line_node(cury+1);
-    char *lline = get_sbuf_line(llp);
-    int newlen = rlen + llp->len + 2;
+  
+    line_t *llp = search_line_node(cury); // previous
+    const char *lline = strdup(get_sbuf_line(llp));
+    int llen = llp->len;
+    
+    line_t *rlp = search_line_node(cury+1); // current
+    const char *rline = strdup(get_sbuf_line(rlp));
+    int rlen = rlp->len;
+    
+    //clear_screen(); printf("%s/%s %d/%d", lline, rline, llen, rlen); exit(0);
+  
+    delete_lines(cury+1, cury+1, true);
+    
+    int newlen = rlen + llen + 2;
     char *uline = malloc(newlen);
-    memcpy(uline, lline, llp->len);
-    strcat(uline, rline); free(rline);
+    memcpy(uline, lline, llen+1);
+    strncat(uline, rline, rlen);
     uline[newlen-2] = '\n';
     uline[newlen-1] = '\0';
-    cury--; curx = llp->len;
+    
+    //clear_screen(); printf("%s", uline); exit(0);
+    
+    cury--; curx = llen;
+    
     const char *cline = uline;
     delete_lines(cury+1, cury+1, true);
     append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
-    free(uline);*/
+    free(uline);
   } 
 }
 
