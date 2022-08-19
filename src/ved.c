@@ -243,10 +243,12 @@ void insert_new_line() {
 }
 
 /* delete char*/
-void delete_char() {
+void delete_char() {//clear_screen(); printf("curx %d", curx); exit(0);
   line_t *lp = search_line_node(cury+1);
   char *line = get_sbuf_line(lp);
-  if (curx) {
+  char *rline = strdup(line);
+  int rlen = lp->len;
+  if (curx > 0) {
     int newlen = lp->len+1;
     char *uline = malloc(newlen);
     for (int i = 0; i < newlen; i++) {
@@ -257,10 +259,23 @@ void delete_char() {
     } const char *cline = uline;
     delete_lines(cury+1, cury+1, true);
     append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
-    curx--;
-  } else {
-  
-  }
+    curx--; free(uline);
+  } else if (curx <= 0 && cury) {
+    /*delete_lines(cury+1, cury+1, true);
+    line_t *llp = search_line_node(cury+1);
+    char *lline = get_sbuf_line(llp);
+    int newlen = rlen + llp->len + 2;
+    char *uline = malloc(newlen);
+    memcpy(uline, lline, llp->len);
+    strcat(uline, rline); free(rline);
+    uline[newlen-2] = '\n';
+    uline[newlen-1] = '\0';
+    cury--; curx = llp->len;
+    const char *cline = uline;
+    delete_lines(cury+1, cury+1, true);
+    append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
+    free(uline);*/
+  } 
 }
 
 /* inserted char to text buffer row */
