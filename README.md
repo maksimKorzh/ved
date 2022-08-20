@@ -84,7 +84,7 @@ Here's how ved was born.
     4. Type: "x" - paste 6 lines
 
 # Latest release
-
+https://github.com/maksimKorzh/ved/releases/tag/0.0.1
 
 # Build from sources
     git clone https://github.com/maksimKorzh/ved.git
@@ -92,3 +92,6 @@ Here's how ved was born.
     ./configure
     make
     make install
+
+# Development progress
+[![IMAGE ALT TEXT HERE](https://img.youtube.com/vi/xW4S7-KwOUc/0.jpg)](https://www.youtube.com/watch?v=xW4S7-KwOUc&list=PLLfIBXQeu3aYGP3-x5x-INDUvCDfL570N)
