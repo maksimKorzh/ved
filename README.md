@@ -31,7 +31,7 @@ Here's how ved was born.
     r    go to single char replace mode
     R    go to multi char replace mode
 
-    ^    go to the beginning of the line
+    #    go to the beginning of the line
     $    go to the end of the line
 
     ESC  return to normal mode
