@@ -54,12 +54,12 @@ void print_status_bar(struct buffer *buf) {
   append_buffer(buf, INVERT_VIDEO, 4);
   char message_left[80]; char message_right[80];
   int len_left = snprintf(message_left,
-    sizeof(message_left), "%c %.20s - %d line(s) %s",
-    vmode, fnlen ? def_filename : "No file",
+    sizeof(message_left), "%c %.20s - Line %d/%d %s",
+    vmode, fnlen ? def_filename : "No file", cury + 1,
     last_addr(), modified() ? "[modified]" : "");
   int len_right = snprintf(message_right,
-    sizeof(message_right), "Row %d, Col %d | Len %d ",
-    cury + 1, curx + 1, linelen);
+    sizeof(message_right), " Col %d/%d ",
+    curx + 1, linelen);
   if (len_left > COLS) len_left = COLS;
   append_buffer(buf, message_left, len_left);
   while (len_left < COLS) {
@@ -313,6 +313,22 @@ void insert_char(int c) {
   }
 }
 
+/* replace single char in a line */
+void replace_char(int c) {
+  line_t *lp = search_line_node(cury+1);
+  char *line = get_sbuf_line(lp);
+  int newlen = lp->len+2;
+  char *uline = malloc(newlen);
+  memcpy(uline, line, lp->len); 
+  uline[newlen-2] = '\n';
+  uline[newlen-1] = '\0';
+  uline[curx] = c;
+  const char * cline = uline;
+  delete_lines(cury+1, cury+1, true);
+  append_lines(&cline, current_addr(), current_addr() >= cury+1, true);
+  free(uline);
+}
+
 /* process keypress */
 void read_keyboard() {
   int c = read_key();
@@ -329,13 +345,15 @@ void read_keyboard() {
       case 'i': vmode = 'I'; break;
       case 'a': vmode = 'I'; curx++; break;
       case 'A': vmode = 'I'; curx = search_line_node(cury+1)->len; break;
+      case 'r': vmode = 'r'; break;
+      case 'R': vmode = 'R'; break;
       case 'o': cury++; /* fall through */
       case 'O': {
         const char *nline = "\n";
         append_lines(&nline, current_addr(), current_addr() >= cury+1, true);
         vmode = 'I'; curx = 0;
       } break;
-      case '0': curx = 0; break;
+      case '^': curx = 0; break;
       case '$': curx = search_line_node(cury+1)->len-1; break;
       case 'x': {
         int linelen = search_line_node(cury+1)->len;
@@ -349,6 +367,9 @@ void read_keyboard() {
     if (c == '\n') insert_new_line();
     else if (c == 127) delete_char();
     else if (c != ((c) & 0x1f)) insert_char(c);
+  } else if (vmode == 'r') { replace_char(c); vmode = 'N';
+  } else if (vmode == 'R') { replace_char(c);
+    if (curx < search_line_node(cury+1)->len-1) curx++;
   }
 }
 

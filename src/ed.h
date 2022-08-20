@@ -214,6 +214,7 @@ void move_cursor(int key);
 void insert_new_line();
 void delete_char();
 void insert_char(int c);
+void replace_char(int c);
 void read_keyboard();
 void init_ved();
 void ved_loop();
