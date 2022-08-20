@@ -355,7 +355,7 @@ void read_keyboard() {
         append_lines(&nline, current_addr(), current_addr() >= cury+1, true);
         vmode = 'I'; curx = 0;
       } break;
-      case '^': curx = 0; break;
+      case '#': curx = 0; break;
       case '$': curx = search_line_node(cury+1)->len-1; break;
       case 'x': {
         int linelen = search_line_node(cury+1)->len;

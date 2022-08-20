@@ -1,6 +1,16 @@
 # VED
 Terminal based vi-like text editor built on top of GNU ed
 
+# Project goals
+I wanted to make a hackable, vi-like zero configuration text editor<br>
+for my personal daily use. I started with VIM, it's amazing but bloated.<br>
+Then I tried vi - much better but still lot's of redundant features.<br>
+Finally GNU ed, the editor ex/vi is based on, got into my scope.<br>
+It would've been just perfect if only it had a visual interface,<br>
+so I thought what if I do to ed what Bill Joy did to ex?<br>
+Here's how ved was born.
+
+
 # Features
     Ved is modal text editor, just like vi or vim.
     It has normal, insert/replace and command modes.
