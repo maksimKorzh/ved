@@ -191,7 +191,7 @@ void update_screen() {
 void move_cursor(int key) {
   line_t *row = (cury >= last_addr()) ? NULL : search_line_node(cury+1);
   switch(key) {
-    case 'h': if (curx != 0) curx--; break;
+    case 'h': if (curx >= 0) curx--; break;
     case 'l': if (row && curx < row->len-1) curx++; break;
     case 'k': if (cury != 0) cury--; break;
     case 'j': if (last_addr() && cury != last_addr()-1) cury++; break;
@@ -199,6 +199,7 @@ void move_cursor(int key) {
   row = (cury >= last_addr()) ? NULL : search_line_node(cury+1);
   int rowlen = row ? row->len : 0;
   if (curx > rowlen-1) curx = rowlen-1;
+  if (curx < 0) curx = 0;
 }
 
 /* insert new line */
@@ -328,6 +329,13 @@ void read_keyboard() {
       case 'i': vmode = 'I'; break;
       case 'a': vmode = 'I'; curx++; break;
       case 'A': vmode = 'I'; curx = search_line_node(cury+1)->len; break;
+      case 'x': {
+        int linelen = search_line_node(cury+1)->len;
+        if (curx >= 0 && curx < linelen) {
+          curx++; delete_char();
+          if (curx > linelen-2) curx=linelen-2;
+        }
+      } break;
     }
   } else if (vmode == 'I') {
     if (c == '\n') insert_new_line();
