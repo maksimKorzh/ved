@@ -87,6 +87,8 @@ int ROWS;
 int COLS;
 int cury;
 int curx;
+int oldy;
+int oldx;
 int tabsx;
 int row_offset;
 int col_offset;

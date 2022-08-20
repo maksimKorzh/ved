@@ -29,6 +29,7 @@
 
 enum Status { QUIT = -1, ERR = -2, EMOD = -3, FATAL = -4 };
 char mode = 'v'; // modes: 'e' - ed command move; 'v' - visual mode
+int is_write = 0;
 
 static const char * const inv_com_suf = "Invalid command suffix";
 static const char * const inv_mark_ch = "Invalid mark character";
@@ -624,7 +625,8 @@ static int exec_command( const char ** const ibufpp, const int prev_status,
                   !undo( isglobal ) ) return ERR;
               break;
     case 'w':
-    case 'W': n = **ibufpp;
+    case 'W': is_write = 1;
+              n = **ibufpp;
               if( n == 'q' || n == 'Q' ) ++*ibufpp;
               if( unexpected_command_suffix( **ibufpp ) ) return ERR;
               fnp = get_filename( ibufpp, false );
@@ -765,7 +767,7 @@ int main_loop( const bool initial_error, const bool loose )
   else { status = -1; fputs( "\n?\n", stdout ); print_info_message( "Interrupt" ); }
 
   while( true )
-    {
+    {if (is_write) { cury = oldy; curx = oldx; is_write = 0; }
     if (mode == 'v') ved_loop(&ibufp);
     fflush( stdout ); fflush( stderr );
     if( status < 0 && verbose ) { printf( "%s\n", errmsg ); fflush( stdout ); }

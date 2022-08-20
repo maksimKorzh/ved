@@ -14,6 +14,8 @@ int ROWS = 24;
 int COLS = 80;
 int cury = 0;
 int curx = 0;
+int oldy = 0;
+int oldx = 0;
 int tabsx = 0;
 int row_offset = 0;
 int col_offset = 0;
@@ -341,7 +343,7 @@ void read_keyboard() {
       case 'l':
       case 'k':
       case 'j': move_cursor(c); break;
-      case ':': mode = 'e'; break;
+      case ':': oldy = cury; oldx = curx; mode = 'e'; break;
       case 'i': vmode = 'I'; break;
       case 'a': vmode = 'I'; curx++; break;
       case 'A': vmode = 'I'; curx = search_line_node(cury+1)->len; break;
