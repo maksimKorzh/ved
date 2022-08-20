@@ -295,7 +295,7 @@ int read_file( const char * const filename, const int addr )
   if( !fp )
     {
     show_strerror( filename, errno );
-    set_error_msg( "Cannot open input file" );
+    print_info_message( "Cannot open input file" );
     return -1;
     }
   size = read_stream( filename, fp, addr );
@@ -307,7 +307,7 @@ int read_file( const char * const filename, const int addr )
     set_error_msg( "Cannot close input file" );
     return -2;
     }
-  if( !scripted() ) printf( "%lu\n", size );
+  if( !scripted() ) print_info_message( "%lu bytes read", size );
   return current_addr() - addr;
   }
 
