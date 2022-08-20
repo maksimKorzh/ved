@@ -329,6 +329,14 @@ void read_keyboard() {
       case 'i': vmode = 'I'; break;
       case 'a': vmode = 'I'; curx++; break;
       case 'A': vmode = 'I'; curx = search_line_node(cury+1)->len; break;
+      case 'o': cury++; /* fall through */
+      case 'O': {
+        const char *nline = "\n";
+        append_lines(&nline, current_addr(), current_addr() >= cury+1, true);
+        vmode = 'I'; curx = 0;
+      } break;
+      case '0': curx = 0; break;
+      case '$': curx = search_line_node(cury+1)->len-1; break;
       case 'x': {
         int linelen = search_line_node(cury+1)->len;
         if (curx >= 0 && curx < linelen) {
