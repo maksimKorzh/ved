@@ -581,15 +581,6 @@ static int exec_command( const char ** const ibufpp, const int prev_status,
                   !mark_line_node( search_line_node( second_addr ), n ) )
                 return ERR;
               break;
-    case 'l': n = pf_l; goto pflabel;
-    case 'n': n = pf_n; goto pflabel;
-    case 'p': n = pf_p;
-pflabel:      if( !check_addr_range2( addr_cnt ) ||
-                  !get_command_suffix( ibufpp, &pflags ) ||
-                  !print_lines( first_addr, second_addr, pflags | n ) )
-                return ERR;
-              pflags = 0;
-              break;
     case 'm': if( !check_addr_range2( addr_cnt ) ||
                   !get_third_addr( ibufpp, &addr ) ) return ERR;
               if( addr >= first_addr && addr < second_addr )
