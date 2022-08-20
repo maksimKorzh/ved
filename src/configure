@@ -6,7 +6,7 @@
 # to copy, distribute, and modify it.
 
 pkgname=ved
-pkgversion=1.18
+pkgversion=0.0.1
 progname=ved
 srctrigger=doc/${pkgname}.texi
 

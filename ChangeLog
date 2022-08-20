@@ -1,0 +1,7 @@
+Sat 20 Aug 2022 12:54:53 PM EEST    <freesoft.for.people@gmail.com>
+
+    * Version 0.0.1 released
+    * added following vi key bindings: hjkl, iaAoOrR, x$, ^ = HOME
+    * redirected most essential ed notifications to command prompt
+    * removed ed commands: l,n,p (replaced by visual UI)
+    * added visual interface to GNU ed 1.18 by Antonio Diaz

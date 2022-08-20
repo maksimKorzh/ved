@@ -17,7 +17,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#define VERSION "1.18.0"
+#define VERSION "0.0.1"
 
 #ifndef __cplusplus
 enum Bool { false = 0, true = 1 };
