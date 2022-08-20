@@ -371,11 +371,11 @@ int write_file( const char * const filename, const char * const mode,
     set_error_msg( "Cannot close output file" );
     return -1;
     }
-  if( !scripted() ) printf( "%lu\n", size );
+  if( !scripted() ) print_info_message( "%lu bytes written", size );
   return ( from && from <= to ) ? to - from + 1 : 0;
   }
   
-/* read a single key from STDIN in raw mode*/
+/* read a single key from STDIN in raw mode */
 int read_key(int ed) {
   int bytes;
   char c;

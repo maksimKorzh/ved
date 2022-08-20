@@ -1,6 +1,6 @@
 line 1: hello
 world line 2
-line3 is epffffffffffffffffffffffffffffffffffffffffffffffffffffff
+line3 is epffffffffffffffffffffffffffffffffffffffffffffffff
 
 dfgdfgdfgdfg
 dfg
@@ -22,7 +22,7 @@ hello
 
 
 world
-#include <stdio.h>
+#include <io.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>

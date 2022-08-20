@@ -383,6 +383,7 @@ void init_ved() {
 /* visual editor loop */
 void ved_loop() {
   while (1) {
+    if (cury > last_addr()-1) cury = 0;
     set_current_addr(cury+1);
     update_screen();
     read_keyboard();
