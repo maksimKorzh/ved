@@ -12,7 +12,7 @@ Here's how ved was born.
 
 
 # Features
-    Ved is modal text editor, just like vi or vim.
+    Ved is a modal text editor, just like vi or vim.
     It has normal, insert/replace and command modes.
     
     NORMAL MODE
@@ -39,7 +39,7 @@ Here's how ved was born.
 
     COMMAND MODE
 
-    All but l,p,n GNU ed commands are valid, type "man ved" or "man ed" for more details.
+    All but l,p,n GNU ed commands are valid, type "$ man ved" or "$ man ed" for more details.
     Visual cursor and ed's current address are synced, so you can either manipulate the
     cursor position by typing commands or manipulate the line under the current line.
     While being in normal mode type ':' to enter command mode. Here're some common commands:
