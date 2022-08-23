@@ -513,7 +513,8 @@ static int exec_command( const char ** const ibufpp, const int prev_status,
                                  current_addr() >= first_addr, isglobal ) )
                 return ERR;
               break;
-    case 'd': if( !check_addr_range2( addr_cnt ) ||
+    case 'd': print_info_message("Delete %d line(s)", second_addr-first_addr+1);
+              if( !check_addr_range2( addr_cnt ) ||
                   !get_command_suffix( ibufpp, &pflags ) ) return ERR;
               if( !isglobal ) clear_undo_stack();
               if( !delete_lines( first_addr, second_addr, isglobal ) )
@@ -651,7 +652,8 @@ static int exec_command( const char ** const ibufpp, const int prev_status,
               if( !isglobal ) clear_undo_stack();
               if( !put_lines( second_addr ) ) return ERR;
               break;
-    case 'y': if( !check_addr_range2( addr_cnt ) ||
+    case 'y': print_info_message("Yank %d line(s)", second_addr-first_addr+1);
+              if( !check_addr_range2( addr_cnt ) ||
                   !get_command_suffix( ibufpp, &pflags ) ||
                   !yank_lines( first_addr, second_addr ) ) return ERR;
               break;
